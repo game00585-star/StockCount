@@ -1,1 +1,0 @@
-export function Toast({message}:{message:string}){return message?<div role="status" className="fixed bottom-24 left-1/2 z-50 -translate-x-1/2 rounded-2xl bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-xl">{message}</div>:null;}

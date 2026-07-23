@@ -7,3 +7,4 @@ export type CountSessionItem={id?:number;sessionId:number;productCode:string;pro
 export type CountTransaction={id?:number;sessionId:number;productCode:string;productNameSnapshot:string;action:'ADD'|'SUBTRACT';quantity:number;signedQuantity:number;previousTotal:number;newTotal:number;note:string;countedAt:Date;countedBy:string;createdAt:Date};
 export type ParsedProduct=Pick<Product,'productCode'|'productName'|'unit'|'categoryCode'|'categoryName'> & {row:number;status?:'insert'|'update'|'skip'|'duplicate'|'invalid';error?:string};
 export type ParsedMovement={row:number;productCode:string;sourceProductName:string;sourceUnit:string;sourceBalance?:number;matched?:boolean;matchReason?:string;product?:Product;selected?:boolean;status?:'valid'|'duplicate'|'invalid'};
+export type ExportRecord={id?:number;fileName:string;exportType:'COUNT_SESSION'|'UNMATCHED';sessionId?:number;branchName?:string;createdAt:Date;data:ArrayBuffer};
