@@ -31,5 +31,6 @@ export const auditRepository={
     });queueFirestoreSync();return importId;
   },
   async addTransaction(input:Omit<CountTransaction,'id'|'createdAt'>){await db.countTransactions.add({...input,createdAt:new Date()});await db.countSessions.update(input.sessionId,{updatedAt:new Date()});queueFirestoreSync();},
-  async clearSession(sessionId:number){await db.transaction('rw',db.countSessionItems,db.countTransactions,async()=>{await db.countSessionItems.where('sessionId').equals(sessionId).delete();await db.countTransactions.where('sessionId').equals(sessionId).delete();});queueFirestoreSync();}
+  async clearSession(sessionId:number){await db.transaction('rw',db.countSessionItems,db.countTransactions,async()=>{await db.countSessionItems.where('sessionId').equals(sessionId).delete();await db.countTransactions.where('sessionId').equals(sessionId).delete();});queueFirestoreSync();},
+  async deleteSession(sessionId:number){await db.transaction('rw',db.countSessions,db.countSessionItems,db.countTransactions,db.exportRecords,async()=>{await db.countSessionItems.where('sessionId').equals(sessionId).delete();await db.countTransactions.where('sessionId').equals(sessionId).delete();await db.exportRecords.where('sessionId').equals(sessionId).delete();await db.countSessions.delete(sessionId);});queueFirestoreSync();}
 };

@@ -21,6 +21,13 @@ export default function MovementImportPageV2(){
   const matchedCount=useMemo(()=>rows.filter(row=>row.matched).length,[rows]);
   const selectedCount=useMemo(()=>rows.filter(row=>row.selected&&row.matched).length,[rows]);
   const choose=(session:CountSession)=>{setSelectedId(session.id);localStorage.setItem(sessionKey,String(session.id));setCreating(false);setRows([]);};
+  const openStock=(session:CountSession)=>{choose(session);nav('/count');};
+  const removeBranch=async(session:CountSession)=>{
+    if(!session.id||!confirm(`ลบสาขา ${session.branchName} และข้อมูลการนับทั้งหมดใช่หรือไม่?`))return;
+    await auditRepository.deleteSession(session.id);
+    if(selectedId===session.id){setSelectedId(undefined);localStorage.removeItem(sessionKey);}
+    setMessage(`ลบสาขา ${session.branchName} แล้ว`);
+  };
   const updateRows=(updater:(current:ParsedMovement[])=>ParsedMovement[])=>setRows(current=>updater(current));
   const createBranch=async()=>{
     if(!form.branchName||!form.auditorName)return;
@@ -46,7 +53,7 @@ export default function MovementImportPageV2(){
       <button className="btn-primary" disabled={saving}>{saving?'กำลังสร้าง...':'สร้างสาขาและรอบนับ'}</button>
     </div></form></section>{message&&<div className="notice">{message}</div>}</Page>;
   if(!active)return <Page title="เลือกสาขาที่จะใส่ไฟล์เคลื่อนไหว" subtitle="คลิกเข้าสาขาที่ต้องการ หรือสร้างสาขาใหม่"><section className="panel">
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{sessions.map(session=><button key={session.id} className="rounded-2xl border border-rose-100 p-5 text-left hover:border-rose-500 hover:bg-rose-50" onClick={()=>choose(session)}><b className="block text-lg">{session.branchName}</b><span className="text-xs text-slate-500">{session.sessionNumber}</span><span className="mt-2 block text-sm">คลิกเพื่อเข้าสาขานี้</span></button>)}</div>
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{sessions.map(session=><div key={session.id} className="rounded-2xl border border-rose-100 p-3"><button className="w-full rounded-xl p-2 text-left hover:bg-rose-50" onClick={()=>openStock(session)}><b className="block text-lg">{session.branchName}</b><span className="text-xs text-slate-500">{session.sessionNumber}</span><span className="mt-2 block text-sm font-bold text-rose-700">คลิกเพื่อเข้าหน้านับสต็อก</span></button><button className="mt-2 w-full rounded-xl border border-red-200 px-3 py-2 text-sm font-bold text-red-600 hover:bg-red-50" onClick={()=>void removeBranch(session)}>ลบสาขา</button></div>)}</div>
     <button className="btn-primary mt-5" onClick={()=>setCreating(true)}>+ สร้างสาขาใหม่</button>
   </section></Page>;
   return <Page title="ไฟล์รายการเคลื่อนไหว" subtitle="เลือกสาขาก่อนอัปโหลด — A = รหัสสินค้า, C = ชื่อสินค้า, D = หน่วยนับ">
