@@ -59,12 +59,16 @@ async function performSync(){
   if(!navigator.onLine)return;
   const [local,remote]=await Promise.all([localRows(),listDocuments()]);
   const localIds=new Set(local.map(row=>row.id));
-  const writes:object[]=[
-    ...local.map(row=>({update:{name:`projects/${projectId}/databases/(default)/documents/${collection}/${row.id}`,fields:{table:{stringValue:row.table},key:{stringValue:row.key},payload:{stringValue:row.payload},updatedAt:{timestampValue:new Date().toISOString()}}}})),
-    ...remote.filter(doc=>!localIds.has(doc.name.split('/').pop()||'')).map(doc=>({delete:doc.name}))
+  const jobs:Array<()=>Promise<unknown>>=[
+    ...local.map(row=>()=>request(`${base}/${collection}/${row.id}`,{
+      method:'PATCH',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({fields:{table:{stringValue:row.table},key:{stringValue:row.key},payload:{stringValue:row.payload},updatedAt:{timestampValue:new Date().toISOString()}}})
+    })),
+    ...remote.filter(doc=>!localIds.has(doc.name.split('/').pop()||'')).map(doc=>()=>request(`https://firestore.googleapis.com/v1/${doc.name}`,{method:'DELETE'}))
   ];
-  for(let i=0;i<writes.length;i+=400){
-    await request(`${base}:batchWrite`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({writes:writes.slice(i,i+400)})});
+  for(let i=0;i<jobs.length;i+=8){
+    await Promise.all(jobs.slice(i,i+8).map(job=>job()));
   }
 }
 export async function syncAllToFirestore(){
