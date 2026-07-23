@@ -1,7 +1,7 @@
 import {db} from '../db/database';
 import type {CountSession,CountTransaction,ParsedMovement,ParsedProduct} from '../types';
 import {createSessionNumber} from '../utils/stock';
-import {syncAllToFirestore} from './firebaseSync';
+import {queueFirestoreSync} from './firebaseSync';
 
 export const auditRepository={
   async saveAllowance(fileName:string,rows:ParsedProduct[],by='ผู้ใช้งาน'){
@@ -10,12 +10,12 @@ export const auditRepository={
       await db.products.bulkPut(valid.map(r=>({productCode:r.productCode,productName:r.productName,unit:r.unit,categoryCode:r.categoryCode,categoryName:r.categoryName,isActive:true,createdAt:now,updatedAt:now})));
       await db.allowanceImports.add({fileName,totalRows:rows.length,insertedCount:rows.filter(r=>r.status==='insert').length,updatedCount:rows.filter(r=>r.status==='update').length,skippedCount:rows.filter(r=>r.status==='skip').length,duplicateCount:rows.filter(r=>r.status==='duplicate').length,invalidCount:rows.filter(r=>r.status==='invalid').length,importedAt:now,importedBy:by});
     });
-    await syncAllToFirestore();
+    queueFirestoreSync();
   },
   async createSession(data:Pick<CountSession,'branchName'|'countDate'|'auditorName'|'note'>):Promise<number>{
     const now=new Date(),today=await db.countSessions.filter(s=>new Date(s.createdAt).toDateString()===now.toDateString()).count();
     const id=Number(await db.countSessions.add({...data,sessionNumber:createSessionNumber(now,today+1),status:'ACTIVE',createdBy:data.auditorName,createdAt:now,updatedAt:now}));
-    await syncAllToFirestore();return id;
+    queueFirestoreSync();return id;
   },
   async addMovement(fileName:string,rows:ParsedMovement[],session:CountSession,by:string){
     const now=new Date();
@@ -28,8 +28,8 @@ export const auditRepository={
         if(existing?.id)await db.countSessionItems.update(existing.id,data);else await db.countSessionItems.add(data);
       }
       return importId;
-    });await syncAllToFirestore();return importId;
+    });queueFirestoreSync();return importId;
   },
-  async addTransaction(input:Omit<CountTransaction,'id'|'createdAt'>){await db.countTransactions.add({...input,createdAt:new Date()});await db.countSessions.update(input.sessionId,{updatedAt:new Date()});await syncAllToFirestore();},
-  async clearSession(sessionId:number){await db.transaction('rw',db.countSessionItems,db.countTransactions,async()=>{await db.countSessionItems.where('sessionId').equals(sessionId).delete();await db.countTransactions.where('sessionId').equals(sessionId).delete();});await syncAllToFirestore();}
+  async addTransaction(input:Omit<CountTransaction,'id'|'createdAt'>){await db.countTransactions.add({...input,createdAt:new Date()});await db.countSessions.update(input.sessionId,{updatedAt:new Date()});queueFirestoreSync();},
+  async clearSession(sessionId:number){await db.transaction('rw',db.countSessionItems,db.countTransactions,async()=>{await db.countSessionItems.where('sessionId').equals(sessionId).delete();await db.countTransactions.where('sessionId').equals(sessionId).delete();});queueFirestoreSync();}
 };

@@ -5,6 +5,9 @@ const apiKey='AIzaSyD193e6G62EHa7nP0w2i-YLCPGe6Z3bOEU';
 const base=`https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents`;
 const collection='auditStockData';
 const tableNames=['products','allowanceImports','movementImports','movementItems','countSessions','countSessionItems','countTransactions','movementDrafts','exportRecords'] as const;
+let activeSync:Promise<void>|undefined;
+let queuedTimer:number|undefined;
+let onlineListenerInstalled=false;
 
 type CloudDocument={name:string;fields?:{table?:{stringValue?:string};key?:{stringValue?:string};payload?:{stringValue?:string}}};
 
@@ -72,11 +75,24 @@ async function performSync(){
   }
 }
 export async function syncAllToFirestore(){
-  try{await performSync();}
-  catch(error){console.error('Firebase sync failed; data remains safely stored on this device.',error);}
+  if(activeSync)return activeSync;
+  activeSync=(async()=>{
+    try{await performSync();}
+    catch(error){console.error('Firebase sync failed; data remains safely stored on this device.',error);}
+    finally{activeSync=undefined;}
+  })();
+  return activeSync;
+}
+export function queueFirestoreSync(delay=1200){
+  if(queuedTimer)window.clearTimeout(queuedTimer);
+  queuedTimer=window.setTimeout(()=>{queuedTimer=undefined;void syncAllToFirestore();},delay);
 }
 
 export async function initializeCloudData(){
+  if(!onlineListenerInstalled){
+    window.addEventListener('online',()=>queueFirestoreSync(500));
+    onlineListenerInstalled=true;
+  }
   try{
     const remote=await listDocuments();
     if(!remote.length){if((await localRows()).length)await syncAllToFirestore();return;}

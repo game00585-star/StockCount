@@ -1,0 +1,61 @@
+import {useMemo,useState} from 'react';
+import {useLiveQuery} from 'dexie-react-hooks';
+import {useNavigate} from 'react-router-dom';
+import {db} from '../db/database';
+import type {CountSession,ParsedMovement} from '../types';
+import {matchMovementWithProducts,parseMovementWorkbook} from '../utils/stock';
+import {auditRepository} from '../services/auditRepository';
+import {FileDrop,MatchSummaryCards,MovementImportPreview} from '../components/ImportUI';
+import {Page} from './AllowanceImportPage';
+
+const sessionKey='audit-selected-session';
+export default function MovementImportPageV2(){
+  const products=useLiveQuery(()=>db.products.toArray(),[])||[];
+  const sessions=(useLiveQuery(()=>db.countSessions.where('status').equals('ACTIVE').toArray(),[])||[]) as CountSession[];
+  const [selectedId,setSelectedId]=useState<number|undefined>(()=>Number(localStorage.getItem(sessionKey))||undefined);
+  const [creating,setCreating]=useState(false);
+  const [rows,setRows]=useState<ParsedMovement[]>([]),[file,setFile]=useState(''),[message,setMessage]=useState(''),[saving,setSaving]=useState(false);
+  const [form,setForm]=useState({branchName:'',countDate:new Date().toISOString().slice(0,10),auditorName:'',note:''});
+  const active=sessions.find(session=>session.id===selectedId);
+  const nav=useNavigate();
+  const matchedCount=useMemo(()=>rows.filter(row=>row.matched).length,[rows]);
+  const selectedCount=useMemo(()=>rows.filter(row=>row.selected&&row.matched).length,[rows]);
+  const choose=(session:CountSession)=>{setSelectedId(session.id);localStorage.setItem(sessionKey,String(session.id));setCreating(false);setRows([]);};
+  const updateRows=(updater:(current:ParsedMovement[])=>ParsedMovement[])=>setRows(current=>updater(current));
+  const createBranch=async()=>{
+    if(!form.branchName||!form.auditorName)return;
+    try{setSaving(true);const id=await auditRepository.createSession({...form,countDate:new Date(form.countDate)});const session=await db.countSessions.get(id);if(session)choose(session);setMessage(`สร้างสาขา ${form.branchName} แล้ว`);}
+    catch(error){setMessage(error instanceof Error?error.message:'สร้างสาขาไม่สำเร็จ');}finally{setSaving(false);}
+  };
+  const handle=async(input:File)=>{
+    try{const parsed=matchMovementWithProducts(parseMovementWorkbook(await input.arrayBuffer()),products);setFile(input.name);setRows(parsed);setMessage(`พบใน Allowance ${parsed.filter(row=>row.matched).length} รายการ`);}
+    catch(error){setRows([]);setMessage(error instanceof Error?error.message:'อ่านไฟล์ไม่สำเร็จ');}
+  };
+  const useRows=async()=>{
+    if(!active||!selectedCount)return;
+    try{setSaving(true);await auditRepository.addMovement(file,rows,active,active.auditorName);localStorage.setItem(sessionKey,String(active.id));nav('/count');}
+    catch(error){setMessage(error instanceof Error?error.message:'นำรายการไปนับไม่สำเร็จ');}finally{setSaving(false);}
+  };
+  if(creating||!sessions.length)return <Page title="สร้างสาขาและรอบนับ" subtitle="สร้างได้หลายสาขาและเปิดนับพร้อมกันได้"><section className="panel mx-auto max-w-xl">
+    {!!sessions.length&&<button className="btn-secondary mb-4" onClick={()=>setCreating(false)}>กลับไปเลือกสาขา</button>}
+    <form onSubmit={event=>{event.preventDefault();void createBranch();}}><div className="grid gap-4">
+      <label>ชื่อสาขา<input className="input mt-1" value={form.branchName} onChange={event=>setForm({...form,branchName:event.target.value})} required/></label>
+      <label>วันที่ตรวจนับ<input className="input mt-1" type="date" value={form.countDate} onChange={event=>setForm({...form,countDate:event.target.value})} required/></label>
+      <label>ชื่อผู้ตรวจนับ<input className="input mt-1" value={form.auditorName} onChange={event=>setForm({...form,auditorName:event.target.value})} required/></label>
+      <label>หมายเหตุ<textarea className="input mt-1 min-h-20" value={form.note} onChange={event=>setForm({...form,note:event.target.value})}/></label>
+      <button className="btn-primary" disabled={saving}>{saving?'กำลังสร้าง...':'สร้างสาขาและรอบนับ'}</button>
+    </div></form></section>{message&&<div className="notice">{message}</div>}</Page>;
+  if(!active)return <Page title="เลือกสาขาที่จะใส่ไฟล์เคลื่อนไหว" subtitle="คลิกเข้าสาขาที่ต้องการ หรือสร้างสาขาใหม่"><section className="panel">
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{sessions.map(session=><button key={session.id} className="rounded-2xl border border-rose-100 p-5 text-left hover:border-rose-500 hover:bg-rose-50" onClick={()=>choose(session)}><b className="block text-lg">{session.branchName}</b><span className="text-xs text-slate-500">{session.sessionNumber}</span><span className="mt-2 block text-sm">คลิกเพื่อเข้าสาขานี้</span></button>)}</div>
+    <button className="btn-primary mt-5" onClick={()=>setCreating(true)}>+ สร้างสาขาใหม่</button>
+  </section></Page>;
+  return <Page title="ไฟล์รายการเคลื่อนไหว" subtitle="เลือกสาขาก่อนอัปโหลด — A = รหัสสินค้า, C = ชื่อสินค้า, D = หน่วยนับ">
+    <section className="mb-5 rounded-2xl bg-slate-950 p-4 text-white"><div className="flex flex-wrap items-center justify-between gap-3"><div><span className="text-xs text-slate-400">สาขาที่เลือก</span><b className="block text-lg">{active.branchName}</b><span className="text-xs text-slate-300">{active.sessionNumber} · {active.auditorName}</span></div><button className="btn-secondary" onClick={()=>{setSelectedId(undefined);localStorage.removeItem(sessionKey);setRows([]);}}>เปลี่ยน/เพิ่มสาขา</button></div></section>
+    <section className="panel"><FileDrop label={`เลือกไฟล์รายการเคลื่อนไหวของ ${active.branchName}`} onFile={handle}/>{rows.length>0&&<>
+      <div className="mt-5"><MatchSummaryCards items={[{label:'ทั้งหมด',value:rows.length},{label:'พบ Allowance',value:matchedCount},{label:'เลือกไปนับ',value:selectedCount,tone:'text-rose-700'}]}/></div>
+      <div className="mt-5 flex flex-wrap gap-2"><button className="btn-quiet" onClick={()=>updateRows(current=>current.map(row=>({...row,selected:!!row.matched})))}>เลือกทั้งหมด ({matchedCount})</button><button className="btn-quiet" onClick={()=>updateRows(current=>current.map(row=>({...row,selected:false})))}>ยกเลิกทั้งหมด</button></div>
+      <div className="mt-4"><MovementImportPreview rows={rows} onToggle={index=>updateRows(current=>current.map((row,rowIndex)=>rowIndex===index&&row.matched?{...row,selected:!row.selected}:row))}/></div>
+      <button className="btn-primary mt-4 w-full" disabled={!selectedCount||saving} onClick={()=>void useRows()}>{saving?'กำลังนำรายการเข้า...':`นำรายการไปนับที่ ${active.branchName} (${selectedCount})`}</button>
+    </>}</section>{message&&<div className="notice">{message}</div>}
+  </Page>;
+}

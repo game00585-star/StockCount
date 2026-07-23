@@ -11,7 +11,8 @@ import {ExportHistory} from '../components/ExportHistory';
 import {CountHistoryDrawer,CountStepModal,ProductCountCard,RecentCountHistory,StockCountHeader} from '../components/CountUI';
 import {Empty,Page} from './AllowanceImportPage';
 export default function StockCountPage(){
-  const session=useLiveQuery(()=>db.countSessions.where('status').equals('ACTIVE').last(),[]);
+  const selectedSessionId=Number(localStorage.getItem('audit-selected-session'))||undefined;
+  const session=useLiveQuery(()=>selectedSessionId?db.countSessions.get(selectedSessionId):db.countSessions.where('status').equals('ACTIVE').last(),[selectedSessionId]);
   const items=useLiveQuery(()=>session?.id?db.countSessionItems.where('sessionId').equals(session.id).toArray():[],[session?.id])||[];
   const transactions=useLiveQuery(()=>session?.id?db.countTransactions.where('sessionId').equals(session.id).toArray():[],[session?.id])||[];
   const [query,setQuery]=useState(''),[filter,setFilter]=useState('all'),[sort,setSort]=useState('uncounted'),[selected,setSelected]=useState<CountSessionItem>(),[history,setHistory]=useState<CountSessionItem>(),[clear,setClear]=useState(false),[toast,setToast]=useState('');
