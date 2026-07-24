@@ -1,7 +1,7 @@
 import {db} from '../db/database';
 import type {CountSession,CountTransaction,ParsedMovement,ParsedProduct} from '../types';
 import {createSessionNumber} from '../utils/stock';
-import {queueFirestoreSync} from './firebaseSync';
+import {deleteFirestoreRows, queueFirestoreSync} from './firebaseSync';
 
 export const auditRepository={
   async saveAllowance(fileName:string,rows:ParsedProduct[],by='ผู้ใช้งาน'){
@@ -31,6 +31,27 @@ export const auditRepository={
     });queueFirestoreSync();return importId;
   },
   async addTransaction(input:Omit<CountTransaction,'id'|'createdAt'>){await db.countTransactions.add({...input,createdAt:new Date()});await db.countSessions.update(input.sessionId,{updatedAt:new Date()});queueFirestoreSync();},
-  async clearSession(sessionId:number){await db.transaction('rw',db.countSessionItems,db.countTransactions,async()=>{await db.countSessionItems.where('sessionId').equals(sessionId).delete();await db.countTransactions.where('sessionId').equals(sessionId).delete();});queueFirestoreSync();},
-  async deleteSession(sessionId:number){await db.transaction('rw',db.countSessions,db.countSessionItems,db.countTransactions,db.exportRecords,async()=>{await db.countSessionItems.where('sessionId').equals(sessionId).delete();await db.countTransactions.where('sessionId').equals(sessionId).delete();await db.exportRecords.where('sessionId').equals(sessionId).delete();await db.countSessions.delete(sessionId);});queueFirestoreSync();}
+  async clearSession(sessionId:number){
+    const itemKeys=await db.countSessionItems.where('sessionId').equals(sessionId).primaryKeys();
+    const transactionKeys=await db.countTransactions.where('sessionId').equals(sessionId).primaryKeys();
+    await db.transaction('rw',db.countSessionItems,db.countTransactions,async()=>{await db.countSessionItems.where('sessionId').equals(sessionId).delete();await db.countTransactions.where('sessionId').equals(sessionId).delete();});
+    await deleteFirestoreRows([
+      ...itemKeys.map(key=>({table:'countSessionItems',key})),
+      ...transactionKeys.map(key=>({table:'countTransactions',key}))
+    ]);
+    queueFirestoreSync();
+  },
+  async deleteSession(sessionId:number){
+    const itemKeys=await db.countSessionItems.where('sessionId').equals(sessionId).primaryKeys();
+    const transactionKeys=await db.countTransactions.where('sessionId').equals(sessionId).primaryKeys();
+    const exportKeys=await db.exportRecords.where('sessionId').equals(sessionId).primaryKeys();
+    await db.transaction('rw',db.countSessions,db.countSessionItems,db.countTransactions,db.exportRecords,async()=>{await db.countSessionItems.where('sessionId').equals(sessionId).delete();await db.countTransactions.where('sessionId').equals(sessionId).delete();await db.exportRecords.where('sessionId').equals(sessionId).delete();await db.countSessions.delete(sessionId);});
+    await deleteFirestoreRows([
+      {table:'countSessions',key:sessionId},
+      ...itemKeys.map(key=>({table:'countSessionItems',key})),
+      ...transactionKeys.map(key=>({table:'countTransactions',key})),
+      ...exportKeys.map(key=>({table:'exportRecords',key}))
+    ]);
+    queueFirestoreSync();
+  }
 };
