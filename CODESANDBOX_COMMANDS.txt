@@ -1,0 +1,22 @@
+CodeSandbox / GitHub Codespace commands
+
+Run one line at a time:
+
+git pull origin main
+pnpm install
+pnpm start
+
+If pnpm does not work, use npm:
+
+git pull origin main
+npm install
+npm start
+
+Direct Vite command:
+
+pnpm exec vite --host 0.0.0.0 --port 5173
+
+Important:
+- Upload this package.json to GitHub.
+- If you see "Missing script: dev" or "Missing script: start", CodeSandbox is still using the old package.json.
+- Do not upload node_modules or dist.
