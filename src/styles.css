@@ -17,3 +17,32 @@
 .product-row-status{display:flex;flex-direction:column;align-items:flex-end;gap:.35rem}
 .product-row-status b{font-size:1rem}
 @media(max-width:640px){.stock-table-head{display:none}.product-row{grid-template-columns:1fr}.product-row-status{align-items:flex-start}}
+
+.count-modal-card{width:min(100%,38rem)}
+.count-attempt-list{max-height:32vh;overflow:auto}
+.count-attempt-compact{max-height:24vh;background:#fff8f8}
+.count-attempt-row{align-items:flex-start}
+@media(max-width:480px){
+  body{font-size:14px}
+  .modal-backdrop{align-items:end;padding:0}
+  .modal-card{max-height:92dvh;border-radius:1.25rem 1.25rem 0 0;padding:1rem}
+  .count-modal-card{width:100%}
+  .choice-card{min-height:112px;padding:.8rem}
+  .choice-card svg{width:28px;height:28px}
+  .choice-card span{font-size:.68rem}
+  .key-btn{min-height:50px;border-radius:.85rem}
+  .modal-actions{grid-template-columns:1fr}
+  .count-attempt-list{max-height:28dvh}
+  .count-attempt-row{display:grid!important;grid-template-columns:1fr auto}
+  .product-row{padding:.75rem!important}
+  .panel{border-radius:1.1rem}
+}
+@media(min-width:481px) and (max-width:900px){
+  .modal-card{max-height:90dvh}
+  .count-modal-card{width:min(92vw,40rem)}
+  .count-attempt-list{max-height:30dvh}
+}
+@media(min-width:1200px){
+  .count-modal-card{width:min(42rem,92vw)}
+  .choice-card{min-height:160px}
+}
