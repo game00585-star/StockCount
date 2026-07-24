@@ -12,6 +12,16 @@ import {CountHistoryDrawer,CountStepModal,ProductCountCard,RecentCountHistory,St
 import {Empty,Page} from './AllowanceImportPage';
 
 const UNCATEGORIZED = 'ไม่ระบุหมวด';
+const normalizeCode = (value: unknown) => String(value ?? '').trim();
+const normalizeText = (value: unknown) => String(value ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+const getItemCategory = (item: CountSessionItem) => {
+  const looseItem = item as CountSessionItem & {
+    categoryName?: string;
+    categoryNameSnapshot?: string;
+    category?: string;
+  };
+  return looseItem.categoryNameSnapshot || looseItem.categoryName || looseItem.category || '';
+};
 
 export default function StockCountPage(){
   const selectedSessionId = Number(localStorage.getItem('audit-selected-session')) || undefined;
@@ -38,28 +48,40 @@ export default function StockCountPage(){
   const [clear,setClear] = useState(false);
   const [toast,setToast] = useState('');
 
-  const productByCode = useMemo(() => new Map(products.map(p => [p.productCode, p])), [products]);
+  const productByCode = useMemo(() => {
+    const map = new Map<string, (typeof products)[number]>();
+    products.forEach(product => {
+      map.set(normalizeCode(product.productCode), product);
+    });
+    return map;
+  }, [products]);
   const categories = useMemo(() => {
     const set = new Set<string>();
-    items.forEach(item => set.add(productByCode.get(item.productCode)?.categoryName || UNCATEGORIZED));
+    items.forEach(item => {
+      const product = productByCode.get(normalizeCode(item.productCode));
+      const categoryName = (product?.categoryName || getItemCategory(item) || UNCATEGORIZED).trim();
+      set.add(categoryName || UNCATEGORIZED);
+    });
     return [...set].sort((a,b) => a.localeCompare(b, 'th'));
   }, [items, productByCode]);
 
   const rows = useMemo(() => items.map(item => {
-    const product = productByCode.get(item.productCode);
-    const categoryName = product?.categoryName || UNCATEGORIZED;
-    const tx = transactions.filter(t => t.productCode === item.productCode);
+    const itemCode = normalizeCode(item.productCode);
+    const product = productByCode.get(itemCode);
+    const categoryName = (product?.categoryName || getItemCategory(item) || UNCATEGORIZED).trim() || UNCATEGORIZED;
+    const categoryKey = normalizeText(categoryName);
+    const tx = transactions.filter(t => normalizeCode(t.productCode) === itemCode);
     const total = tx.reduce((sum,t) => sum + t.signedQuantity, 0);
     const latest = [...tx].sort((a,b) => +new Date(b.countedAt) - +new Date(a.countedAt))[0];
-    return {item, categoryName, tx, total, latest};
+    return {item, itemCode, categoryName, categoryKey, tx, total, latest};
   }).filter(row => {
-    const keyword = query.trim().toLowerCase();
+    const keyword = normalizeText(query);
     if (!keyword) return true;
-    return [row.item.productCode, row.item.productNameSnapshot, row.categoryName]
+    return [row.itemCode, row.item.productNameSnapshot, row.categoryName]
       .join(' ')
       .toLowerCase()
       .includes(keyword);
-  }).filter(row => category === 'all' || row.categoryName === category)
+  }).filter(row => category === 'all' || row.categoryKey === normalizeText(category))
     .filter(row =>
       filter === 'all' ||
       (filter === 'new' && !row.latest) ||
@@ -83,7 +105,8 @@ export default function StockCountPage(){
 
   const save = async(v:{action:'ADD'|'SUBTRACT';quantity:number;note:string}) => {
     const item = selected!;
-    const tx = transactions.filter(t => t.productCode === item.productCode);
+    const itemCode = normalizeCode(item.productCode);
+    const tx = transactions.filter(t => normalizeCode(t.productCode) === itemCode);
     const old = tx.reduce((sum,t) => sum + t.signedQuantity, 0);
     const signed = v.action === 'ADD' ? v.quantity : -v.quantity;
     await auditRepository.addTransaction({
@@ -111,7 +134,7 @@ export default function StockCountPage(){
   };
 
   return <Page title="นับสต็อก" subtitle="เลือกสาขา ค้นหมวดหมู่ แล้วแตะรายการเพื่อบันทึกยอด">
-    <StockCountHeader session={session} total={items.length} counted={new Set(transactions.map(t => t.productCode)).size}/>
+    <StockCountHeader session={session} total={items.length} counted={new Set(transactions.map(t => normalizeCode(t.productCode))).size}/>
 
     <div className="mt-5 grid gap-5 xl:grid-cols-[1.6fr_1fr]">
       <section className="panel">
@@ -164,8 +187,8 @@ export default function StockCountPage(){
       </aside>
     </div>
 
-    {selected && <CountStepModal item={selected} transactions={transactions.filter(t => t.productCode === selected.productCode)} auditor={session.auditorName} onClose={() => setSelected(undefined)} onSave={save}/>}
-    {history && <CountHistoryDrawer item={history} transactions={transactions.filter(t => t.productCode === history.productCode)} onClose={() => setHistory(undefined)}/>}
+    {selected && <CountStepModal item={selected} transactions={transactions.filter(t => normalizeCode(t.productCode) === normalizeCode(selected.productCode))} auditor={session.auditorName} onClose={() => setSelected(undefined)} onSave={save}/>}
+    {history && <CountHistoryDrawer item={history} transactions={transactions.filter(t => normalizeCode(t.productCode) === normalizeCode(history.productCode))} onClose={() => setHistory(undefined)}/>}
     <ConfirmDialog open={clear} title="ล้างข้อมูลรอบปัจจุบัน?" detail="รายการสินค้าและประวัติการนับในรอบนี้จะถูกลบ การกระทำนี้ย้อนกลับไม่ได้" onCancel={() => setClear(false)} onConfirm={async() => {await auditRepository.clearSession(session.id!);setClear(false);setToast('ล้างข้อมูลรอบปัจจุบันแล้ว')}}/>
     <Toast message={toast}/>
   </Page>;
