@@ -8,3 +8,4 @@ export type CountTransaction={id?:number;sessionId:number;productCode:string;pro
 export type ParsedProduct=Pick<Product,'productCode'|'productName'|'unit'|'categoryCode'|'categoryName'> & {row:number;status?:'insert'|'update'|'skip'|'duplicate'|'invalid';error?:string};
 export type ParsedMovement={row:number;productCode:string;sourceProductName:string;sourceUnit:string;sourceBalance?:number;matched?:boolean;matchReason?:string;product?:Product;selected?:boolean;status?:'valid'|'duplicate'|'invalid'};
 export type ExportRecord={id?:number;fileName:string;exportType:'COUNT_SESSION'|'UNMATCHED';sessionId?:number;branchName?:string;createdAt:Date;data:ArrayBuffer};
+export type AuditUser={id?:number;username:string;password:string;displayName:string;role:'ADMIN'|'USER';allowedBranches:string[];isActive:boolean;createdAt:Date;updatedAt:Date};

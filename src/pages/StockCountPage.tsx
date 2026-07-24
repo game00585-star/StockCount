@@ -10,6 +10,7 @@ import {Toast} from '../components/Toast';
 import {ExportHistory} from '../components/ExportHistory';
 import {CountHistoryDrawer,CountStepModal,ProductCountCard,RecentCountHistory,StockCountHeader} from '../components/CountUI';
 import {Empty,Page} from './AllowanceImportPage';
+import {canAccessBranch, filterSessionsByUser, getCurrentUser} from '../services/authService';
 
 const UNCATEGORIZED = 'ไม่ระบุหมวด';
 const normalizeCode = (value: unknown) => String(value ?? '').trim();
@@ -24,10 +25,19 @@ const getItemCategory = (item: CountSessionItem) => {
 };
 
 export default function StockCountPage(){
+  const currentUser = getCurrentUser();
   const selectedSessionId = Number(localStorage.getItem('audit-selected-session')) || undefined;
   const session = useLiveQuery(
-    () => selectedSessionId ? db.countSessions.get(selectedSessionId) : db.countSessions.where('status').equals('ACTIVE').last(),
-    [selectedSessionId]
+    async () => {
+      if (selectedSessionId) {
+        const selectedSession = await db.countSessions.get(selectedSessionId);
+        if (selectedSession && canAccessBranch(currentUser, selectedSession.branchName)) return selectedSession;
+      }
+      const activeSessions = await db.countSessions.where('status').equals('ACTIVE').toArray();
+      const allowedSessions = filterSessionsByUser(activeSessions, currentUser);
+      return allowedSessions[allowedSessions.length - 1];
+    },
+    [selectedSessionId, currentUser?.username]
   );
   const items = useLiveQuery(
     () => session?.id ? db.countSessionItems.where('sessionId').equals(session.id).toArray() : [],

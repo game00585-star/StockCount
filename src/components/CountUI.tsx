@@ -4,10 +4,13 @@ import {useLiveQuery} from 'dexie-react-hooks';
 import type {CountSession,CountSessionItem,CountTransaction} from '../types';
 import {formatThaiDateTime} from '../utils/stock';
 import {db} from '../db/database';
+import {filterSessionsByUser, getCurrentUser} from '../services/authService';
 
 export function StockCountHeader({session,total,counted}:{session:CountSession;total:number;counted:number}){
   const pct = total ? Math.round(counted / total * 100) : 0;
-  const sessions = (useLiveQuery(() => db.countSessions.where('status').equals('ACTIVE').toArray(), []) || []) as CountSession[];
+  const currentUser = getCurrentUser();
+  const allSessions = (useLiveQuery(() => db.countSessions.where('status').equals('ACTIVE').toArray(), []) || []) as CountSession[];
+  const sessions = filterSessionsByUser(allSessions, currentUser);
   const choose = (id:number) => {localStorage.setItem('audit-selected-session', String(id)); location.reload()};
   return <>
     <section className="panel mb-5">

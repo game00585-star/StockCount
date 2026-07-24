@@ -4,7 +4,7 @@ const projectId='audit-stock-count';
 const apiKey='AIzaSyD193e6G62EHa7nP0w2i-YLCPGe6Z3bOEU';
 const base=`https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents`;
 const collection='auditStockData';
-const tableNames=['products','allowanceImports','movementImports','movementItems','countSessions','countSessionItems','countTransactions','movementDrafts','exportRecords'] as const;
+const tableNames=['products','allowanceImports','movementImports','movementItems','countSessions','countSessionItems','countTransactions','movementDrafts','exportRecords','auditUsers'] as const;
 let activeSync:Promise<void>|undefined;
 let queuedTimer:number|undefined;
 let onlineListenerInstalled=false;
