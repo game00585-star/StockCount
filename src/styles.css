@@ -46,3 +46,58 @@
   .count-modal-card{width:min(42rem,92vw)}
   .choice-card{min-height:160px}
 }
+
+/* Responsive safety layer for Audit Stock Count */
+html{min-width:320px;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+body{overflow-x:hidden}
+#root{min-height:100dvh}
+img,svg,video,canvas{max-width:100%}
+.panel,.modal-card,.table-wrap,.stock-table{max-width:100%}
+.table-wrap{-webkit-overflow-scrolling:touch}
+input,select,textarea{font-size:16px}
+button{touch-action:manipulation}
+.input-shell input{font-size:16px}
+.notice{left:auto}
+@media(max-width:1024px){
+  .xl\:grid-cols-\[1fr_1\.5fr\],
+  .xl\:grid-cols-\[1\.6fr_1fr\]{grid-template-columns:1fr!important}
+  .section-title{line-height:1.35}
+}
+@media(max-width:768px){
+  body{background:#fffafa}
+  main{width:100%}
+  .panel{padding:1rem}
+  .btn-primary,.btn-secondary,.btn-danger,.btn-danger-outline,.btn-quiet{width:100%;padding:.7rem .85rem}
+  .flex.gap-2{flex-wrap:wrap}
+  .metric-card{padding:.85rem}
+  .notice{inset:auto .75rem calc(5.25rem + env(safe-area-inset-bottom)) .75rem;max-width:none}
+  .table-wrap{border-radius:.85rem}
+  table{font-size:.78rem}
+  th,td{padding:.65rem}
+}
+@media(max-width:640px){
+  .sm\:grid-cols-2{grid-template-columns:1fr!important}
+  .sm\:text-3xl{font-size:1.65rem!important;line-height:1.2!important}
+  .section-title{font-size:.98rem}
+  .nav-link{min-height:48px}
+  .badge{white-space:nowrap}
+  .stock-table{border-radius:.9rem}
+  .product-row{grid-template-columns:1fr!important;gap:.55rem}
+  .product-row-status{align-items:flex-start!important;flex-direction:row;justify-content:space-between;width:100%}
+  .modal-backdrop{padding-top:0}
+  .modal-card{width:100vw}
+}
+@media(max-width:380px){
+  .panel{padding:.8rem;border-radius:1rem}
+  .btn-primary,.btn-secondary,.btn-danger,.btn-danger-outline,.btn-quiet{font-size:.86rem}
+  .product-row h3{font-size:.9rem}
+  .product-row p{font-size:.68rem}
+  .key-btn{min-height:46px;font-size:1.08rem}
+  table{font-size:.72rem}
+  th,td{padding:.55rem}
+}
+@media(min-width:1440px){
+  .panel{padding:1.75rem}
+  .product-row{min-height:78px!important}
+  table{font-size:.86rem}
+}
