@@ -8,6 +8,7 @@ import {auditRepository} from '../services/auditRepository';
 import {FileDrop,MatchSummaryCards,MovementImportPreview} from '../components/ImportUI';
 import {Page} from './AllowanceImportPage';
 import {canAccessBranch, filterSessionsByUser, getCurrentUser} from '../services/authService';
+import {PageSizeControl,usePageSize} from '../components/PageSizeControl';
 
 const sessionKey='audit-selected-session';
 export default function MovementImportPageV2(){
@@ -18,6 +19,8 @@ export default function MovementImportPageV2(){
   const [selectedId,setSelectedId]=useState<number|undefined>(()=>Number(localStorage.getItem(sessionKey))||undefined);
   const [creating,setCreating]=useState(false);
   const [rows,setRows]=useState<ParsedMovement[]>([]),[file,setFile]=useState(''),[message,setMessage]=useState(''),[saving,setSaving]=useState(false);
+  const [pageSize,setPageSize]=usePageSize();
+  const [page,setPage]=useState(1);
   const [form,setForm]=useState({branchName:'',countDate:new Date().toISOString().slice(0,10),auditorName:'',note:''});
   const active=sessions.find(session=>session.id===selectedId);
   const nav=useNavigate();
@@ -39,7 +42,7 @@ export default function MovementImportPageV2(){
     catch(error){setMessage(error instanceof Error?error.message:'สร้างสาขาไม่สำเร็จ');}finally{setSaving(false);}
   };
   const handle=async(input:File)=>{
-    try{const parsed=matchMovementWithProducts(parseMovementWorkbook(await input.arrayBuffer()),products);setFile(input.name);setRows(parsed);setMessage(`พบใน Allowance ${parsed.filter(row=>row.matched).length} รายการ`);}
+    try{const parsed=matchMovementWithProducts(parseMovementWorkbook(await input.arrayBuffer()),products);setFile(input.name);setRows(parsed);setPage(1);setMessage(`พบใน Allowance ${parsed.filter(row=>row.matched).length} รายการ`);}
     catch(error){setRows([]);setMessage(error instanceof Error?error.message:'อ่านไฟล์ไม่สำเร็จ');}
   };
   const useAllAllowance=()=>{
@@ -57,6 +60,7 @@ export default function MovementImportPageV2(){
     }));
     setFile(`Allowance-${new Date().toISOString().slice(0,10)}.json`);
     setRows(allowanceRows);
+    setPage(1);
     setMessage(`อ้างอิงสินค้าจาก Allowance แล้ว ${allowanceRows.length.toLocaleString('th-TH')} รายการ กรุณาตรวจสอบและกดยืนยันนำไปนับสต็อก`);
   };
   const useRows=async()=>{
@@ -83,7 +87,8 @@ export default function MovementImportPageV2(){
     <section className="panel"><FileDrop label={`เลือกไฟล์รายการเคลื่อนไหวของ ${active.branchName}`} onFile={handle}/><div className="movement-allowance-fallback"><div><b>ไม่มีไฟล์รายการเคลื่อนไหว?</b><p>ใช้สินค้าทุกรายการที่พร้อมใช้งานจากไฟล์ Allowance แทนได้</p></div><button type="button" className="btn-secondary" disabled={!products.length||saving} onClick={useAllAllowance}>อ้างอิงสินค้าทั้งหมดจาก Allowance ({products.filter(product=>product.isActive).length.toLocaleString('th-TH')})</button></div>{rows.length>0&&<>
       <div className="mt-5"><MatchSummaryCards items={[{label:'ทั้งหมด',value:rows.length},{label:'พบ Allowance',value:matchedCount},{label:'เลือกไปนับ',value:selectedCount,tone:'text-rose-700'}]}/></div>
       <div className="mt-5 flex flex-wrap gap-2"><button className="btn-quiet" onClick={()=>updateRows(current=>current.map(row=>({...row,selected:!!row.matched})))}>เลือกทั้งหมด ({matchedCount})</button><button className="btn-quiet" onClick={()=>updateRows(current=>current.map(row=>({...row,selected:false})))}>ยกเลิกทั้งหมด</button></div>
-      <div className="mt-4"><MovementImportPreview rows={rows} onToggle={index=>updateRows(current=>current.map((row,rowIndex)=>rowIndex===index&&row.matched?{...row,selected:!row.selected}:row))}/></div>
+      <PageSizeControl total={rows.length} page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize}/>
+      <div className="mt-4"><MovementImportPreview rows={rows.slice((page-1)*pageSize,page*pageSize)} onToggle={index=>{const absoluteIndex=(page-1)*pageSize+index;updateRows(current=>current.map((row,rowIndex)=>rowIndex===absoluteIndex&&row.matched?{...row,selected:!row.selected}:row))}}/></div>
       <button className="btn-primary mt-4 w-full" disabled={!selectedCount||saving} onClick={()=>void useRows()}>{saving?'กำลังนำรายการเข้า...':`นำรายการไปนับที่ ${active.branchName} (${selectedCount})`}</button>
     </>}</section>{message&&<div className="notice">{message}</div>}
   </Page>;

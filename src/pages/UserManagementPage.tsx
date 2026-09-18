@@ -5,6 +5,7 @@ import {db} from '../db/database';
 import {getCurrentUser} from '../services/authService';
 import {queueFirestoreSync} from '../services/firebaseSync';
 import {Empty, Page} from './AllowanceImportPage';
+import {PageSizeControl,usePageSize} from '../components/PageSizeControl';
 
 export default function UserManagementPage() {
   const currentUser = getCurrentUser();
@@ -13,6 +14,8 @@ export default function UserManagementPage() {
   const branches = useMemo(() => [...new Set(sessions.map(session => session.branchName).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'th')), [sessions]);
   const [form, setForm] = useState({username: '', password: '', displayName: '', role: 'USER', allowedBranches: ''});
   const [message, setMessage] = useState('');
+  const [pageSize,setPageSize]=usePageSize();
+  const [page,setPage]=useState(1);
 
   if (currentUser?.role !== 'ADMIN') {
     return <Page title="ผู้ใช้งาน" subtitle="เฉพาะผู้ดูแลระบบเท่านั้น">
@@ -94,10 +97,11 @@ export default function UserManagementPage() {
 
       <section className="panel">
         <h2 className="section-title">รายการ User</h2>
+        <PageSizeControl total={users.length} page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize}/>
         <div className="table-wrap">
           <table>
             <thead><tr><th>User</th><th>ชื่อ</th><th>สิทธิ์</th><th>สาขาที่เห็น</th><th></th></tr></thead>
-            <tbody>{users.map(user => <tr key={user.id}>
+            <tbody>{users.slice((page-1)*pageSize,page*pageSize).map(user => <tr key={user.id}>
               <td>{user.username}</td>
               <td>{user.displayName}</td>
               <td>{user.role}</td>

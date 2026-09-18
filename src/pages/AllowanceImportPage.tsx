@@ -8,14 +8,15 @@ import {auditRepository} from '../services/auditRepository';
 import {AllowanceImportPreview,FileDrop,MatchSummaryCards} from '../components/ImportUI';
 import {ConfirmDialog} from '../components/ConfirmDialog';
 import {getCurrentUser} from '../services/authService';
+import {PageSizeControl,usePageSize} from '../components/PageSizeControl';
 
 export default function AllowanceImportPage(){
   const isAdmin=getCurrentUser()?.role==='ADMIN';
   const products=useLiveQuery(()=>db.products.toArray(),[])||[],imports=useLiveQuery(()=>db.allowanceImports.reverse().toArray(),[])||[];
   const [rows,setRows]=useState<ParsedProduct[]>([]),[file,setFile]=useState(''),[query,setQuery]=useState(''),[category,setCategory]=useState(''),[page,setPage]=useState(1),[message,setMessage]=useState(''),[deleteOpen,setDeleteOpen]=useState(false),[deleting,setDeleting]=useState(false);
+  const [pageSize,setPageSize]=usePageSize();
   const summary=useMemo(()=>Object.fromEntries(['insert','update','skip','duplicate','invalid'].map(key=>[key,rows.filter(row=>row.status===key).length])),[rows]);
   const filtered=products.filter(product=>(product.productCode.includes(query)||product.productName.toLowerCase().includes(query.toLowerCase()))&&(!category||product.categoryName===category));
-  const pageCount=Math.max(1,Math.ceil(filtered.length/10));
   const handleFile=async(input:File)=>{try{setFile(input.name);setRows(compareAllowance(parseAllowanceWorkbook(await input.arrayBuffer()),products));setMessage('ตรวจสอบข้อมูลเรียบร้อยแล้ว กรุณาตรวจ Preview ก่อนยืนยัน')}catch(error){setMessage(error instanceof Error?error.message:'อ่านไฟล์ไม่สำเร็จ')}};
   const save=async()=>{await auditRepository.saveAllowance(file,rows);setRows([]);setMessage('อัปเดต Product Master แล้ว')};
   const clearAllowance=async()=>{try{setDeleting(true);await auditRepository.clearAllowance();setRows([]);setFile('');setQuery('');setCategory('');setPage(1);setDeleteOpen(false);setMessage('ลบข้อมูล Allowance และประวัตินำเข้าเรียบร้อยแล้ว')}catch(error){setMessage(error instanceof Error?error.message:'ไม่สามารถลบข้อมูล Allowance ได้')}finally{setDeleting(false)}};
@@ -25,8 +26,8 @@ export default function AllowanceImportPage(){
       <section className="panel product-panel">
         <div className="panel-heading"><h2 className="section-title">รายการสินค้า <span className="badge">{products.length}</span></h2><div className="desktop-actions">{isAdmin&&<button className="btn-danger-outline" disabled={!products.length||deleting} onClick={()=>setDeleteOpen(true)}><Trash2/>ลบข้อมูล Allowance</button>}</div></div>
         <div className="product-filters"><label className="input-shell"><Search/><span className="sr-only">ค้นหาสินค้า</span><input value={query} onChange={event=>{setQuery(event.target.value);setPage(1)}} placeholder="ค้นหารหัสหรือชื่อสินค้า"/></label><label><span className="sr-only">หมวดสินค้า</span><select className="input" value={category} onChange={event=>{setCategory(event.target.value);setPage(1)}}><option value="">ทุกหมวดสินค้า</option>{[...new Set(products.map(product=>product.categoryName).filter(Boolean))].map(name=><option key={name}>{name}</option>)}</select></label></div>
-        <ProductMasterTable products={filtered.slice((page-1)*10,page*10)}/>
-        <div className="pagination"><span>หน้า {Math.min(page,pageCount)} / {pageCount}</span><div><button className="btn-quiet" disabled={page===1} onClick={()=>setPage(value=>value-1)}>ก่อนหน้า</button><button className="btn-quiet" disabled={page>=pageCount} onClick={()=>setPage(value=>value+1)}>ถัดไป</button></div></div>
+        <ProductMasterTable products={filtered.slice((page-1)*pageSize,page*pageSize)}/>
+        <PageSizeControl total={filtered.length} page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize}/>
       </section>
     </div>
     <section className="panel import-history"><h2 className="section-title"><History/>ประวัติการ Import</h2>{imports.length?<div className="table-scroll" role="region" aria-label="ตารางประวัติการนำเข้า" tabIndex={0}><table><thead><tr><th>ชื่อไฟล์</th><th>วันที่นำเข้า</th><th>เพิ่ม</th><th>อัปเดต</th><th>ข้าม</th><th>ผิดพลาด</th></tr></thead><tbody>{imports.map(item=><tr key={item.id}><td>{item.fileName}</td><td>{formatThaiDateTime(item.importedAt)}</td><td>{item.insertedCount}</td><td>{item.updatedCount}</td><td>{item.skippedCount}</td><td>{item.duplicateCount+item.invalidCount}</td></tr>)}</tbody></table></div>:<Empty text="ยังไม่มีประวัติการนำเข้า"/>}</section>

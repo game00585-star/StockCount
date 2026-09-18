@@ -12,6 +12,7 @@ import {ConfirmDialog} from '../components/ConfirmDialog';
 import {Toast} from '../components/Toast';
 import {ExportHistory} from '../components/ExportHistory';
 import {CountHistoryDrawer,CountStepModal,ProductCountCard,RecentCountHistory,StockCountHeader} from '../components/CountUI';
+import {PageSizeControl,usePageSize} from '../components/PageSizeControl';
 import {Empty,Page} from './AllowanceImportPage';
 import {canAccessBranch, filterSessionsByUser, getCurrentUser} from '../services/authService';
 
@@ -56,6 +57,8 @@ export default function StockCountPage(){
   const [filter,setFilter] = useState('all');
   const [category,setCategory] = useState('all');
   const [sort,setSort] = useState('category');
+  const [pageSize,setPageSize] = usePageSize();
+  const [page,setPage] = useState(1);
   const [selected,setSelected] = useState<CountSessionItem>();
   const [history,setHistory] = useState<CountSessionItem>();
   const [clear,setClear] = useState(false);
@@ -257,19 +260,19 @@ export default function StockCountPage(){
     <div className="mt-5 grid gap-5 xl:grid-cols-[1.6fr_1fr]">
       <section className="panel">
         <div className="stock-filters grid gap-3" onKeyDown={event=>{if(event.key==='Enter'&&event.target instanceof HTMLInputElement){event.preventDefault();openBarcode(query)}}}>
-          <label className="input-shell barcode-search-shell"><Search/><input value={query} onChange={e => setQuery(e.target.value)} placeholder="ค้นหาชื่อสินค้า / รหัสสินค้า / หมวดหมู่"/><button type="button" className="barcode-camera-button" aria-label="เปิดกล้องสแกนบาร์โค้ด" title="สแกนบาร์โค้ดด้วยกล้อง" onClick={event=>{event.preventDefault();setScannerOpen(true)}}><Camera/></button></label>
-          <select className="input" value={category} onChange={e => setCategory(e.target.value)}>
+          <label className="input-shell barcode-search-shell"><Search/><input value={query} onChange={e => {setQuery(e.target.value);setPage(1)}} placeholder="ค้นหาชื่อสินค้า / รหัสสินค้า / หมวดหมู่"/><button type="button" className="barcode-camera-button" aria-label="เปิดกล้องสแกนบาร์โค้ด" title="สแกนบาร์โค้ดด้วยกล้อง" onClick={event=>{event.preventDefault();setScannerOpen(true)}}><Camera/></button></label>
+          <select className="input" value={category} onChange={e => {setCategory(e.target.value);setPage(1)}}>
             <option value="all">ทุกหมวดหมู่</option>
             {categories.map(name => <option key={name} value={name}>{name}</option>)}
           </select>
-          <select className="input" value={filter} onChange={e => setFilter(e.target.value)}>
+          <select className="input" value={filter} onChange={e => {setFilter(e.target.value);setPage(1)}}>
             <option value="all">ทั้งหมด</option>
             <option value="new">ยังไม่นับ</option>
             <option value="counted">นับแล้ว</option>
             <option value="zero">ยอดเป็นศูนย์</option>
             <option value="negative">ยอดติดลบ</option>
           </select>
-          <select className="input" value={sort} onChange={e => setSort(e.target.value)}>
+          <select className="input" value={sort} onChange={e => {setSort(e.target.value);setPage(1)}}>
             <option value="category">เรียงตามหมวดหมู่</option>
             <option value="uncounted">ยังไม่นับก่อน</option>
             <option value="latest">นับล่าสุด</option>
@@ -278,10 +281,11 @@ export default function StockCountPage(){
           </select>
         </div>
 
+        <PageSizeControl total={rows.length} page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize}/>
         <div className="stock-table mt-5">
           <div className="stock-table-head"><span>สินค้า / หมวดหมู่</span><span>สถานะ / ยอดนับ</span></div>
           <div className="grid gap-0">
-            {rows.map(row => <div key={row.item.productCode} className="relative">
+            {rows.slice((page-1)*pageSize,page*pageSize).map(row => <div key={row.item.productCode} className="relative">
               <ProductCountCard item={row.item} categoryName={row.categoryName} transactions={row.tx} onClick={() => setSelected(row.item)}/>
               {row.latest && <button aria-label="ดูประวัติ" className="absolute bottom-3 left-3 rounded-lg p-2 text-slate-400 hover:bg-slate-100" onClick={() => setHistory(row.item)}><History size={17}/></button>}
             </div>)}
