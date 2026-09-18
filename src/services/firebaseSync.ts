@@ -34,13 +34,27 @@ type ChunkDocument = {
 };
 
 const maxPayloadLength = 650_000;
+const pendingStorageKey = 'audit-stock-pending-sync-v1';
 let activeSync: Promise<void> | undefined;
 let queuedTimer: number | undefined;
 let onlineListenerInstalled = false;
-const dirtyTables = new Set<TableName>();
+const dirtyTables = new Set<TableName>(loadPendingTables());
 
 function isTableName(value: string): value is TableName {
   return (tableNames as readonly string[]).includes(value);
+}
+
+function loadPendingTables(): TableName[] {
+  try {
+    const values = JSON.parse(localStorage.getItem(pendingStorageKey) || '[]') as string[];
+    return values.filter(isTableName);
+  } catch {
+    return [];
+  }
+}
+
+function persistPendingTables() {
+  localStorage.setItem(pendingStorageKey, JSON.stringify([...dirtyTables]));
 }
 
 function toBase64(value: ArrayBuffer) {
@@ -79,15 +93,6 @@ async function request(url: string, init?: RequestInit) {
   const response = await fetch(`${url}${url.includes('?') ? '&' : '?'}key=${apiKey}`, init);
   if (!response.ok) throw new Error(`Firebase ${response.status}: ${await response.text()}`);
   return response.status === 204 ? undefined : response.json();
-}
-
-async function safeRequest(url: string, init?: RequestInit) {
-  try {
-    return await request(url, init);
-  } catch (error) {
-    console.error('Firebase sync skipped.', error);
-    return undefined;
-  }
 }
 
 async function listChunkDocuments() {
@@ -138,6 +143,8 @@ async function pullFirestoreToLocal() {
   }
 
   for (const [tableName, tableChunks] of byTable) {
+    // Local changes made while offline always win. Do not overwrite them before upload.
+    if (dirtyTables.has(tableName)) continue;
     const records = tableChunks
       .sort((a, b) => Number(a.fields?.chunkIndex?.integerValue || 0) - Number(b.fields?.chunkIndex?.integerValue || 0))
       .flatMap(document => deserialize(document.fields?.payload?.stringValue || '[]'));
@@ -150,7 +157,7 @@ async function pullFirestoreToLocal() {
 }
 
 async function pushTablesToFirestore(tables: Iterable<TableName>) {
-  if (!navigator.onLine) return;
+  if (!navigator.onLine) throw new Error('Offline');
 
   const tableList = [...new Set(tables)];
   if (!tableList.length) return;
@@ -162,7 +169,7 @@ async function pushTablesToFirestore(tables: Iterable<TableName>) {
     const chunks = makeChunks(records);
     const keepIds = new Set(chunks.map((_payload, index) => chunkId(tableName, index)));
 
-    const writes = chunks.map((payload, index) => () => safeRequest(`${base}/${chunkCollection}/${chunkId(tableName, index)}`, {
+    const writes = chunks.map((payload, index) => () => request(`${base}/${chunkCollection}/${chunkId(tableName, index)}`, {
       method: 'PATCH',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
@@ -180,25 +187,29 @@ async function pushTablesToFirestore(tables: Iterable<TableName>) {
         const id = document.name.split('/').pop() || '';
         return document.fields?.table?.stringValue === tableName && !keepIds.has(id);
       })
-      .map(document => () => safeRequest(`https://firestore.googleapis.com/v1/${document.name}`, {method: 'DELETE'}));
+      .map(document => () => request(`https://firestore.googleapis.com/v1/${document.name}`, {method: 'DELETE'}));
 
     const jobs = [...writes, ...deletes];
     for (let i = 0; i < jobs.length; i += 6) {
       await Promise.all(jobs.slice(i, i + 6).map(job => job()));
     }
+    dirtyTables.delete(tableName);
+    persistPendingTables();
   }
 }
 
 export async function syncAllToFirestore() {
   if (activeSync) return activeSync;
+  if (!navigator.onLine || !dirtyTables.size) return;
 
   activeSync = (async () => {
     try {
-      const tables = dirtyTables.size ? [...dirtyTables] : tableNames;
-      dirtyTables.clear();
-      await pushTablesToFirestore(tables);
+      await pushTablesToFirestore([...dirtyTables]);
     } catch (error) {
       console.error('Firebase sync failed; data remains safely stored on this device.', error);
+      window.setTimeout(() => {
+        if (navigator.onLine && dirtyTables.size) queueFirestoreSync([], 0);
+      }, 15000);
     } finally {
       activeSync = undefined;
     }
@@ -214,6 +225,7 @@ export function queueFirestoreSync(tablesOrDelay?: TableName[] | number, delay =
     tableNames.forEach(table => dirtyTables.add(table));
     if (typeof tablesOrDelay === 'number') delay = tablesOrDelay;
   }
+  persistPendingTables();
 
   if (queuedTimer) window.clearTimeout(queuedTimer);
   queuedTimer = window.setTimeout(() => {
@@ -238,17 +250,19 @@ export async function deleteFirestoreRows(_rows: Array<{table: string; key: unkn
 
 export async function initializeCloudData() {
   if (!onlineListenerInstalled) {
-    window.addEventListener('online', () => queueFirestoreSync(2000));
+    window.addEventListener('online', () => queueFirestoreSync([], 2000));
     document.addEventListener('visibilitychange', () => {
-      if (!document.hidden) void refreshFromFirestore();
+      if (!document.hidden && navigator.onLine) {
+        if (dirtyTables.size) queueFirestoreSync([], 0);
+        else void refreshFromFirestore();
+      }
     });
     onlineListenerInstalled = true;
   }
 
   try {
+    if (dirtyTables.size) await syncAllToFirestore();
     await pullFirestoreToLocal();
-    const counts = await Promise.all(tableNames.map(tableName => db.table(tableName).count()));
-    if (counts.some(Boolean)) queueFirestoreSync([...tableNames], 8000);
   } catch (error) {
     console.error('Firebase sync unavailable; continuing with local data.', error);
   }

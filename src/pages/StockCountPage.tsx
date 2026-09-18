@@ -5,6 +5,7 @@ import {db} from '../db/database';
 import type {CountSessionItem} from '../types';
 import {auditRepository} from '../services/auditRepository';
 import {exportCountSession} from '../services/exportService';
+import {downloadJsonBackup} from '../services/backupService';
 import {ConfirmDialog} from '../components/ConfirmDialog';
 import {Toast} from '../components/Toast';
 import {ExportHistory} from '../components/ExportHistory';
@@ -143,12 +144,18 @@ export default function StockCountPage(){
     setTimeout(() => setToast(''), 2500);
   };
 
+  const doBackup = async() => {
+    await downloadJsonBackup();
+    setToast('ดาวน์โหลดไฟล์ Backup JSON แล้ว');
+    setTimeout(() => setToast(''), 2500);
+  };
+
   return <Page title="นับสต็อก" subtitle="เลือกสาขา ค้นหมวดหมู่ แล้วแตะรายการเพื่อบันทึกยอด">
     <StockCountHeader session={session} total={items.length} counted={new Set(transactions.map(t => normalizeCode(t.productCode))).size}/>
 
     <div className="mt-5 grid gap-5 xl:grid-cols-[1.6fr_1fr]">
       <section className="panel">
-        <div className="grid gap-3 lg:grid-cols-[1fr_180px_150px_170px]">
+        <div className="stock-filters grid gap-3">
           <label className="input-shell"><Search/><input value={query} onChange={e => setQuery(e.target.value)} placeholder="ค้นหาชื่อสินค้า / รหัสสินค้า / หมวดหมู่"/></label>
           <select className="input" value={category} onChange={e => setCategory(e.target.value)}>
             <option value="all">ทุกหมวดหมู่</option>
@@ -187,6 +194,7 @@ export default function StockCountPage(){
           <h2 className="section-title">จัดการรอบนับ</h2>
           <div className="grid gap-2">
             <button className="btn-primary" onClick={doExport}><Download/>Export Excel</button>
+            <button className="btn-secondary" onClick={doBackup}><Download/>Backup JSON</button>
             <button className="btn-secondary" onClick={() => document.getElementById('recent')?.scrollIntoView({behavior:'smooth'})}><History/>ดูประวัติการนับ</button>
             <button className="btn-secondary" onClick={() => location.assign('/movement')}><Plus/>เริ่มรอบนับใหม่</button>
             <button className="btn-danger-outline" onClick={() => setClear(true)}><Trash2/>ล้างข้อมูลรอบปัจจุบัน</button>

@@ -44,7 +44,7 @@ export function DesktopSidebar() {
 
 export function MobileBottomNavigation() {
   const links = useLinks();
-  return <nav className="fixed inset-x-0 bottom-0 z-30 grid border-t border-rose-100 bg-white/95 px-2 pb-[max(8px,env(safe-area-inset-bottom))] pt-2 backdrop-blur lg:hidden" style={{gridTemplateColumns: `repeat(${links.length}, minmax(0, 1fr))`}}>
+  return <nav className="mobile-bottom-nav fixed inset-x-0 bottom-0 z-30 grid border-t border-rose-100 bg-white/95 px-2 pb-[max(8px,env(safe-area-inset-bottom))] pt-2 backdrop-blur lg:hidden" style={{gridTemplateColumns: `repeat(${links.length}, minmax(0, 1fr))`}}>
     {links.map(([to, label, Icon]) =>
       <NavLink key={to} to={to} className={({isActive}) => `flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl text-[11px] font-bold ${isActive ? 'bg-rose-50 text-rose-700' : 'text-slate-500'}`}><Icon size={21}/>{label}</NavLink>
     )}
@@ -52,5 +52,5 @@ export function MobileBottomNavigation() {
 }
 
 export function AppLayout() {
-  return <div className="min-h-screen lg:flex"><DesktopSidebar/><main className="min-w-0 flex-1 pb-24 lg:pb-0"><Outlet/></main><MobileBottomNavigation/></div>;
+  return <div className="min-h-screen lg:flex"><DesktopSidebar/><main className="app-main min-w-0 flex-1 pb-24 lg:pb-0"><Outlet/></main><MobileBottomNavigation/></div>;
 }
