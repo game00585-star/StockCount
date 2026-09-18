@@ -34,7 +34,8 @@ type ChunkDocument = {
   };
 };
 
-const maxPayloadLength = 650_000;
+// Firestore limits strings by UTF-8 bytes; Thai characters can use three bytes.
+const maxPayloadBytes = 700_000;
 const pendingStorageKey = 'audit-stock-pending-sync-v1';
 let activeSync: Promise<void> | undefined;
 let queuedTimer: number | undefined;
@@ -128,7 +129,7 @@ function makeChunks(records: unknown[]) {
   for (const record of records) {
     const next = [...current, record];
     const payload = serialize(next);
-    if (payload.length > maxPayloadLength && current.length) {
+    if (new TextEncoder().encode(payload).byteLength > maxPayloadBytes && current.length) {
       chunks.push(serialize(current));
       current = [record];
     } else {
@@ -159,9 +160,25 @@ async function pullFirestoreToLocal() {
       .sort((a, b) => Number(a.fields?.chunkIndex?.integerValue || 0) - Number(b.fields?.chunkIndex?.integerValue || 0))
       .flatMap(document => deserialize(document.fields?.payload?.stringValue || '[]'));
 
-    await db.transaction('rw', db.table(tableName), async () => {
-      await db.table(tableName).clear();
-      if (records.length) await db.table(tableName).bulkPut(records);
+    // Never clear local data during refresh. Firebase can be behind this device
+    // (for example when the page is refreshed before a queued upload finishes).
+    // Merge missing remote rows and only replace a local row when the remote row
+    // has a newer updatedAt value. This keeps offline/local counts from vanishing.
+    const table = db.table(tableName);
+    await db.transaction('rw', table, async () => {
+      for (const record of records as Array<Record<string,unknown>>) {
+        const keyPath = table.schema.primKey.keyPath;
+        const key = typeof keyPath === 'string' ? record[keyPath] : undefined;
+        if (typeof key !== 'string' && typeof key !== 'number') continue;
+        const local = await table.get(key) as Record<string,unknown> | undefined;
+        if (!local) {
+          await table.put(record);
+          continue;
+        }
+        const remoteUpdated = record.updatedAt ? +new Date(record.updatedAt as string | Date) : 0;
+        const localUpdated = local.updatedAt ? +new Date(local.updatedAt as string | Date) : 0;
+        if (remoteUpdated && remoteUpdated > localUpdated) await table.put(record);
+      }
     });
   }
 }
@@ -169,17 +186,21 @@ async function pullFirestoreToLocal() {
 async function pushTablesToFirestore(tables: Iterable<TableName>) {
   if (!navigator.onLine) throw new Error('Offline');
 
-  const tableList = [...new Set(tables)];
+  const priority:TableName[]=['countTransactions','countSessionItems','countSessions','products','allowanceImports','movementImports','movementItems','movementDrafts','auditUsers'];
+  const requested=new Set(tables);
+  const tableList = priority.filter(table=>requested.has(table));
   if (!tableList.length) return;
 
   const existing = await listChunkDocuments();
 
+  const failures:string[]=[];
   for (const tableName of tableList) {
-    const records = await db.table(tableName).toArray();
-    const chunks = makeChunks(records);
-    const keepIds = new Set(chunks.map((_payload, index) => chunkId(tableName, index)));
+    try {
+      const records = await db.table(tableName).toArray();
+      const chunks = makeChunks(records);
+      const keepIds = new Set(chunks.map((_payload, index) => chunkId(tableName, index)));
 
-    const writes = chunks.map((payload, index) => () => request(`${base}/${chunkCollection}/${chunkId(tableName, index)}`, {
+      const writes = chunks.map((payload, index) => () => request(`${base}/${chunkCollection}/${chunkId(tableName, index)}`, {
       method: 'PATCH',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
@@ -192,20 +213,25 @@ async function pushTablesToFirestore(tables: Iterable<TableName>) {
       })
     }));
 
-    const deletes = existing
+      const deletes = existing
       .filter(document => {
         const id = document.name.split('/').pop() || '';
         return document.fields?.table?.stringValue === tableName && !keepIds.has(id);
       })
       .map(document => () => request(`https://firestore.googleapis.com/v1/${document.name}`, {method: 'DELETE'}));
 
-    const jobs = [...writes, ...deletes];
-    for (let i = 0; i < jobs.length; i += 6) {
-      await Promise.all(jobs.slice(i, i + 6).map(job => job()));
+      const jobs = [...writes, ...deletes];
+      for (let i = 0; i < jobs.length; i += 4) {
+        await Promise.all(jobs.slice(i, i + 4).map(job => job()));
+      }
+      dirtyTables.delete(tableName);
+      persistPendingTables();
+    } catch(error) {
+      failures.push(tableName);
+      console.error(`Firebase table sync failed: ${tableName}`,error);
     }
-    dirtyTables.delete(tableName);
-    persistPendingTables();
   }
+  if(failures.length)throw new Error(`Firebase sync incomplete: ${failures.join(', ')}`);
 }
 
 export async function syncAllToFirestore() {
