@@ -99,6 +99,20 @@ button{touch-action:manipulation}
   .product-row-status{align-items:flex-start!important;flex-direction:row;justify-content:space-between;width:100%}
   .modal-backdrop{padding-top:0}
   .modal-card{width:100vw}
+
+  /* Mobile Allowance view: lookup only. Imports and audits stay on desktop. */
+  .xl\:grid-cols-\[1fr_1\.5fr\]>section:first-child{display:none}
+  .xl\:grid-cols-\[1fr_1\.5fr\]+.panel{display:none}
+  .xl\:grid-cols-\[1fr_1\.5fr\]>section:nth-child(2)>div:first-child>div:last-child{display:none}
+  .xl\:grid-cols-\[1fr_1\.5fr\]>section:nth-child(2)>.mt-4.grid select{display:none}
+  .xl\:grid-cols-\[1fr_1\.5fr\]>section:nth-child(2) .table-wrap{overflow:hidden}
+  .xl\:grid-cols-\[1fr_1\.5fr\]>section:nth-child(2) table{table-layout:fixed;white-space:normal}
+  .xl\:grid-cols-\[1fr_1\.5fr\]>section:nth-child(2) th:nth-child(n+3),
+  .xl\:grid-cols-\[1fr_1\.5fr\]>section:nth-child(2) td:nth-child(n+3){display:none}
+  .xl\:grid-cols-\[1fr_1\.5fr\]>section:nth-child(2) th:first-child,
+  .xl\:grid-cols-\[1fr_1\.5fr\]>section:nth-child(2) td:first-child{width:38%;overflow-wrap:anywhere}
+  .xl\:grid-cols-\[1fr_1\.5fr\]>section:nth-child(2) th:nth-child(2),
+  .xl\:grid-cols-\[1fr_1\.5fr\]>section:nth-child(2) td:nth-child(2){width:62%;overflow-wrap:anywhere}
 }
 @media(max-width:380px){
   .panel{padding:.8rem;border-radius:1rem}
