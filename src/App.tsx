@@ -7,6 +7,7 @@ import LoginPage from './pages/LoginPage';
 import MovementImportPage from './pages/MovementImportPageV2';
 import StockCountPage from './pages/StockCountPage';
 import UserManagementPage from './pages/UserManagementPage';
+import BackupPage from './pages/BackupPage';
 
 function RequireAuth() {
   const [ready, setReady] = useState(false);
@@ -36,6 +37,7 @@ export default function App() {
       <Route path="/movement" element={<MovementImportPage/>}/>
       <Route path="/count" element={<StockCountPage/>}/>
       <Route path="/users" element={<UserManagementPage/>}/>
+      <Route path="/backup" element={<BackupPage/>}/>
     </Route>
     <Route path="*" element={<Navigate to="/movement" replace/>}/>
   </Routes>;

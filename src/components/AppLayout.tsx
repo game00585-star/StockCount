@@ -1,4 +1,4 @@
-import {ClipboardList, FileSpreadsheet, LogOut, PackageCheck, ShieldCheck, Users} from 'lucide-react';
+import {ClipboardList, DatabaseBackup, FileSpreadsheet, LogOut, PackageCheck, ShieldCheck, Users} from 'lucide-react';
 import {NavLink, Outlet, useNavigate} from 'react-router-dom';
 import {branchListText, getCurrentUser, logout} from '../services/authService';
 
@@ -18,7 +18,7 @@ function useLinks() {
 export function DesktopSidebar() {
   const navigate = useNavigate();
   const user = getCurrentUser();
-  const links = useLinks();
+  const links = [...useLinks(), ['/backup', 'สำรองข้อมูล', DatabaseBackup] as const];
 
   const doLogout = () => {
     logout();
