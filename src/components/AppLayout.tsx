@@ -13,7 +13,7 @@ function usePrimaryLinks(){
   const user=getCurrentUser();
   return user?.role==='ADMIN'?[...baseLinks,['/users','ผู้ใช้งาน',Users] as const]:baseLinks;
 }
-function useAllLinks(){return [...usePrimaryLinks(),['/backup','สำรองข้อมูล',DatabaseBackup] as const]}
+function useAllLinks(){return [...usePrimaryLinks(),['/backup','สำรองและกู้คืน',DatabaseBackup] as const]}
 
 function UserSummary({onLogout}:{onLogout:()=>void}){
   const user=getCurrentUser();
