@@ -231,7 +231,6 @@ export async function syncAllToFirestore() {
 export function queueFirestoreSync(tablesOrDelay?: TableName[] | number, delay = 5000) {
   if (Array.isArray(tablesOrDelay)) {
     tablesOrDelay.forEach(table => dirtyTables.add(table));
-    if(tablesOrDelay.length) window.dispatchEvent(new CustomEvent('audit-data-changed',{detail:{tables:tablesOrDelay,localSaved:true}}));
   } else {
     tableNames.forEach(table => dirtyTables.add(table));
     if (typeof tablesOrDelay === 'number') delay = tablesOrDelay;
@@ -245,7 +244,6 @@ export function queueFirestoreSync(tablesOrDelay?: TableName[] | number, delay =
   }, delay);
 }
 
-export function getFirebaseSyncStatus(){return{pending:dirtyTables.size,blocked:Date.now()<blockedUntil,online:navigator.onLine}}
 
 export async function refreshFromFirestore() {
   if (Date.now() < blockedUntil) return;

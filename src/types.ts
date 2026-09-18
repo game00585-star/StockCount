@@ -9,5 +9,3 @@ export type ParsedProduct=Pick<Product,'productCode'|'productName'|'unit'|'categ
 export type ParsedMovement={row:number;productCode:string;sourceProductName:string;sourceUnit:string;sourceBalance?:number;matched?:boolean;matchReason?:string;product?:Product;selected?:boolean;status?:'valid'|'duplicate'|'invalid'};
 export type ExportRecord={id?:number;fileName:string;exportType:'COUNT_SESSION'|'UNMATCHED';sessionId?:number;branchName?:string;createdAt:Date;data:ArrayBuffer};
 export type AuditUser={id?:number;username:string;password:string;displayName:string;role:'ADMIN'|'USER';allowedBranches:string[];isActive:boolean;createdAt:Date;updatedAt:Date};
-export type SharePointBackupJob={id:string;fileName:string;payload:string;reason:string;branchScope:string[];status:'PENDING'|'UPLOADING'|'AUTH_REQUIRED'|'FAILED';attempts:number;createdAt:Date;nextAttemptAt:Date;lastError?:string};
-export type AppSetting={key:string;value:unknown;updatedAt:Date};
