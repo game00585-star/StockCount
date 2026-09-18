@@ -97,7 +97,6 @@ export default function UserManagementPage() {
 
       <section className="panel">
         <h2 className="section-title">รายการ User</h2>
-        <PageSizeControl total={users.length} page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize}/>
         <div className="table-wrap">
           <table>
             <thead><tr><th>User</th><th>ชื่อ</th><th>สิทธิ์</th><th>สาขาที่เห็น</th><th></th></tr></thead>
@@ -110,6 +109,7 @@ export default function UserManagementPage() {
             </tr>)}</tbody>
           </table>
         </div>
+        <PageSizeControl total={users.length} page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize}/>
       </section>
     </div>
   </Page>;

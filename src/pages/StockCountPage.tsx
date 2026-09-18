@@ -281,7 +281,6 @@ export default function StockCountPage(){
           </select>
         </div>
 
-        <PageSizeControl total={rows.length} page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize}/>
         <div className="stock-table mt-5">
           <div className="stock-table-head"><span>สินค้า / หมวดหมู่</span><span>สถานะ / ยอดนับ</span></div>
           <div className="grid gap-0">
@@ -292,6 +291,7 @@ export default function StockCountPage(){
           </div>
         </div>
         {!rows.length && <Empty text="ไม่พบสินค้าตามเงื่อนไข"/>}
+        {!!rows.length&&<PageSizeControl total={rows.length} page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize}/>}
       </section>
 
       <aside className="space-y-5">

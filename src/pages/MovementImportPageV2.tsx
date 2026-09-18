@@ -87,8 +87,8 @@ export default function MovementImportPageV2(){
     <section className="panel"><FileDrop label={`เลือกไฟล์รายการเคลื่อนไหวของ ${active.branchName}`} onFile={handle}/><div className="movement-allowance-fallback"><div><b>ไม่มีไฟล์รายการเคลื่อนไหว?</b><p>ใช้สินค้าทุกรายการที่พร้อมใช้งานจากไฟล์ Allowance แทนได้</p></div><button type="button" className="btn-secondary" disabled={!products.length||saving} onClick={useAllAllowance}>อ้างอิงสินค้าทั้งหมดจาก Allowance ({products.filter(product=>product.isActive).length.toLocaleString('th-TH')})</button></div>{rows.length>0&&<>
       <div className="mt-5"><MatchSummaryCards items={[{label:'ทั้งหมด',value:rows.length},{label:'พบ Allowance',value:matchedCount},{label:'เลือกไปนับ',value:selectedCount,tone:'text-rose-700'}]}/></div>
       <div className="mt-5 flex flex-wrap gap-2"><button className="btn-quiet" onClick={()=>updateRows(current=>current.map(row=>({...row,selected:!!row.matched})))}>เลือกทั้งหมด ({matchedCount})</button><button className="btn-quiet" onClick={()=>updateRows(current=>current.map(row=>({...row,selected:false})))}>ยกเลิกทั้งหมด</button></div>
-      <PageSizeControl total={rows.length} page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize}/>
       <div className="mt-4"><MovementImportPreview rows={rows.slice((page-1)*pageSize,page*pageSize)} onToggle={index=>{const absoluteIndex=(page-1)*pageSize+index;updateRows(current=>current.map((row,rowIndex)=>rowIndex===absoluteIndex&&row.matched?{...row,selected:!row.selected}:row))}}/></div>
+      <PageSizeControl total={rows.length} page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize}/>
       <button className="btn-primary mt-4 w-full" disabled={!selectedCount||saving} onClick={()=>void useRows()}>{saving?'กำลังนำรายการเข้า...':`นำรายการไปนับที่ ${active.branchName} (${selectedCount})`}</button>
     </>}</section>{message&&<div className="notice">{message}</div>}
   </Page>;
