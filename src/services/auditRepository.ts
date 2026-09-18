@@ -40,6 +40,13 @@ export const auditRepository={
     });queueFirestoreSync(['movementImports','movementItems','countSessionItems']);return importId;
   },
   async addTransaction(input:Omit<CountTransaction,'id'|'createdAt'>){await db.countTransactions.add({...input,createdAt:new Date()});await db.countSessions.update(input.sessionId,{updatedAt:new Date()});queueFirestoreSync(['countTransactions','countSessions']);},
+  async closeSession(sessionId:number){
+    const session=await db.countSessions.get(sessionId);
+    if(!session)throw new Error('ไม่พบรอบนับที่ต้องการจบงาน');
+    if(session.status==='CLOSED')return;
+    await db.countSessions.update(sessionId,{status:'CLOSED',updatedAt:new Date()});
+    queueFirestoreSync(['countSessions']);
+  },
   async clearSession(sessionId:number){
     const itemKeys=await db.countSessionItems.where('sessionId').equals(sessionId).primaryKeys();
     const transactionKeys=await db.countTransactions.where('sessionId').equals(sessionId).primaryKeys();

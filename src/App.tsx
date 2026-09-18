@@ -8,6 +8,7 @@ import MovementImportPage from './pages/MovementImportPageV2';
 import StockCountPage from './pages/StockCountPage';
 import UserManagementPage from './pages/UserManagementPage';
 import BackupPage from './pages/BackupPage';
+import CountHistoryPage from './pages/CountHistoryPage';
 
 function RequireAuth() {
   const [ready, setReady] = useState(false);
@@ -36,6 +37,7 @@ export default function App() {
       <Route path="/allowance" element={<AllowanceImportPage/>}/>
       <Route path="/movement" element={<MovementImportPage/>}/>
       <Route path="/count" element={<StockCountPage/>}/>
+      <Route path="/count-history" element={<CountHistoryPage/>}/>
       <Route path="/users" element={<UserManagementPage/>}/>
       <Route path="/backup" element={<BackupPage/>}/>
     </Route>

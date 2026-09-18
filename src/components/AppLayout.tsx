@@ -1,54 +1,11 @@
 import {useEffect,useState} from 'react';
-import {ClipboardList,DatabaseBackup,FileSpreadsheet,LogOut,Menu,PackageCheck,ShieldCheck,Users,X} from 'lucide-react';
+import {ClipboardList,DatabaseBackup,FileClock,FileSpreadsheet,LogOut,Menu,PackageCheck,ShieldCheck,Users,X} from 'lucide-react';
 import {NavLink,Outlet,useNavigate} from 'react-router-dom';
 import {branchListText,getCurrentUser,logout} from '../services/authService';
-
-const baseLinks=[
-  ['/allowance','ไฟล์ Allowance',FileSpreadsheet],
-  ['/movement','ไฟล์รายการเคลื่อนไหว',ClipboardList],
-  ['/count','นับสต็อก',PackageCheck]
-] as const;
-
-function usePrimaryLinks(){
-  const user=getCurrentUser();
-  return user?.role==='ADMIN'?[...baseLinks,['/users','ผู้ใช้งาน',Users] as const]:baseLinks;
-}
-function useAllLinks(){return [...usePrimaryLinks(),['/backup','สำรองและกู้คืน',DatabaseBackup] as const]}
-
-function UserSummary({onLogout}:{onLogout:()=>void}){
-  const user=getCurrentUser();
-  return <div className="user-summary">
-    <b>{user?.displayName||user?.username}</b>
-    <span>สิทธิ์: {user?.role}</span><span>สาขา: {branchListText(user)}</span>
-    <button onClick={onLogout}><LogOut size={17}/>ออกจากระบบ</button>
-  </div>;
-}
-
-export function DesktopSidebar(){
-  const navigate=useNavigate(),links=useAllLinks();
-  const doLogout=()=>{logout();navigate('/login',{replace:true})};
-  return <aside className="desktop-sidebar">
-    <div className="brand"><span><ShieldCheck/></span><div><b>Audit Stock</b><small>COUNT CONTROL</small></div></div>
-    <nav aria-label="เมนูหลัก">{links.map(([to,label,Icon])=><NavLink key={to} to={to} className={({isActive})=>`nav-link ${isActive?'nav-active':''}`}><Icon size={21}/>{label}</NavLink>)}</nav>
-    <UserSummary onLogout={doLogout}/>
-  </aside>;
-}
-
-export function ResponsiveNavigation(){
-  const [open,setOpen]=useState(false),navigate=useNavigate(),allLinks=useAllLinks(),primaryLinks=usePrimaryLinks();
-  const doLogout=()=>{setOpen(false);logout();navigate('/login',{replace:true})};
-  useEffect(()=>{const close=(event:KeyboardEvent)=>event.key==='Escape'&&setOpen(false);addEventListener('keydown',close);return()=>removeEventListener('keydown',close)},[]);
-  return <>
-    <header className="compact-header"><div className="compact-brand"><ShieldCheck/><b>Audit Stock</b></div><button className="menu-button" aria-label="เปิดเมนู" aria-expanded={open} onClick={()=>setOpen(true)}><Menu/></button></header>
-    {open&&<div className="drawer-layer" role="presentation" onMouseDown={event=>event.target===event.currentTarget&&setOpen(false)}>
-      <aside className="nav-drawer" role="dialog" aria-modal="true" aria-label="เมนูหลัก">
-        <div className="drawer-heading"><b>เมนู</b><button className="icon-btn" aria-label="ปิดเมนู" onClick={()=>setOpen(false)}><X/></button></div>
-        <nav>{allLinks.map(([to,label,Icon])=><NavLink key={to} to={to} onClick={()=>setOpen(false)} className={({isActive})=>`nav-link ${isActive?'nav-active':''}`}><Icon size={21}/>{label}</NavLink>)}</nav>
-        <UserSummary onLogout={doLogout}/>
-      </aside>
-    </div>}
-    <nav className="mobile-bottom-nav" aria-label="เมนูด่วน">{primaryLinks.slice(0,4).map(([to,label,Icon])=><NavLink key={to} to={to} className={({isActive})=>isActive?'mobile-nav-active':''}><Icon/><span>{label}</span></NavLink>)}</nav>
-  </>;
-}
-
+const baseLinks=[['/allowance','ไฟล์ Allowance',FileSpreadsheet],['/movement','ไฟล์รายการเคลื่อนไหว',ClipboardList],['/count','นับสต็อก',PackageCheck],['/count-history','ประวัติการนับสินค้า',FileClock]] as const;
+function usePrimaryLinks(){const user=getCurrentUser();return user?.role==='ADMIN'?[...baseLinks,['/users','ผู้ใช้งาน',Users] as const]:baseLinks}
+function useAllLinks(){return[...usePrimaryLinks(),['/backup','สำรองและกู้คืน',DatabaseBackup] as const]}
+function UserSummary({onLogout}:{onLogout:()=>void}){const user=getCurrentUser();return <div className="user-summary"><b>{user?.displayName||user?.username}</b><span>สิทธิ์: {user?.role}</span><span>สาขา: {branchListText(user)}</span><button onClick={onLogout}><LogOut size={17}/>ออกจากระบบ</button></div>}
+export function DesktopSidebar(){const navigate=useNavigate(),links=useAllLinks(),doLogout=()=>{logout();navigate('/login',{replace:true})};return <aside className="desktop-sidebar"><div className="brand"><span><ShieldCheck/></span><div><b>Audit Stock</b><small>COUNT CONTROL</small></div></div><nav aria-label="เมนูหลัก">{links.map(([to,label,Icon])=><NavLink key={to} to={to} className={({isActive})=>`nav-link ${isActive?'nav-active':''}`}><Icon size={21}/>{label}</NavLink>)}</nav><UserSummary onLogout={doLogout}/></aside>}
+export function ResponsiveNavigation(){const[open,setOpen]=useState(false),navigate=useNavigate(),allLinks=useAllLinks(),primaryLinks=usePrimaryLinks(),doLogout=()=>{setOpen(false);logout();navigate('/login',{replace:true})};useEffect(()=>{const close=(event:KeyboardEvent)=>event.key==='Escape'&&setOpen(false);addEventListener('keydown',close);return()=>removeEventListener('keydown',close)},[]);return <><header className="compact-header"><div className="compact-brand"><ShieldCheck/><b>Audit Stock</b></div><button className="menu-button" aria-label="เปิดเมนู" aria-expanded={open} onClick={()=>setOpen(true)}><Menu/></button></header>{open&&<div className="drawer-layer" role="presentation" onMouseDown={event=>event.target===event.currentTarget&&setOpen(false)}><aside className="nav-drawer" role="dialog" aria-modal="true" aria-label="เมนูหลัก"><div className="drawer-heading"><b>เมนู</b><button className="icon-btn" aria-label="ปิดเมนู" onClick={()=>setOpen(false)}><X/></button></div><nav>{allLinks.map(([to,label,Icon])=><NavLink key={to} to={to} onClick={()=>setOpen(false)} className={({isActive})=>`nav-link ${isActive?'nav-active':''}`}><Icon size={21}/>{label}</NavLink>)}</nav><UserSummary onLogout={doLogout}/></aside></div>}<nav className="mobile-bottom-nav" aria-label="เมนูด่วน">{primaryLinks.slice(0,4).map(([to,label,Icon])=><NavLink key={to} to={to} className={({isActive})=>isActive?'mobile-nav-active':''}><Icon/><span>{label}</span></NavLink>)}</nav></>}
 export function AppLayout(){return <div className="app-shell"><DesktopSidebar/><ResponsiveNavigation/><main className="app-main"><Outlet/></main></div>}

@@ -1,6 +1,7 @@
 ﻿import {useMemo,useState} from 'react';
 import {useLiveQuery} from 'dexie-react-hooks';
-import {Download,History,Plus,Search,Trash2} from 'lucide-react';
+import {useEffect,useRef} from 'react';
+import {CheckCircle2,Download,History,Plus,ScanBarcode,Search,Trash2} from 'lucide-react';
 import {db} from '../db/database';
 import type {CountSessionItem} from '../types';
 import {auditRepository} from '../services/auditRepository';
@@ -57,7 +58,11 @@ export default function StockCountPage(){
   const [selected,setSelected] = useState<CountSessionItem>();
   const [history,setHistory] = useState<CountSessionItem>();
   const [clear,setClear] = useState(false);
+  const [finishConfirm,setFinishConfirm] = useState(false);
+  const [finishing,setFinishing] = useState(false);
   const [toast,setToast] = useState('');
+  const scanBuffer = useRef('');
+  const lastScanKeyAt = useRef(0);
 
   const productByCode = useMemo(() => {
     const map = new Map<string, (typeof products)[number]>();
@@ -107,6 +112,48 @@ export default function StockCountPage(){
       return a.categoryName.localeCompare(b.categoryName, 'th') || a.item.productNameSnapshot.localeCompare(b.item.productNameSnapshot, 'th');
     }), [items, transactions, productByCode, query, category, filter, sort]);
 
+  const openBarcode = (rawCode:string) => {
+    const code = normalizeCode(rawCode);
+    if (!code) return;
+    const exact = items.find(item => normalizeCode(item.productCode) === code);
+    setQuery(code);
+    setCategory('all');
+    setFilter('all');
+    if (exact) {
+      setSelected(exact);
+      setToast(`พบบาร์โค้ด ${code}: ${exact.productNameSnapshot}`);
+    } else {
+      setToast(`ไม่พบบาร์โค้ด ${code} ในรอบนับนี้`);
+      const input=document.querySelector<HTMLInputElement>('.stock-filters input');
+      input?.focus();
+      input?.select();
+    }
+    window.setTimeout(() => setToast(''), 3000);
+  };
+
+  useEffect(() => {
+    const receiveScanner = (event:KeyboardEvent) => {
+      if (selected || history || event.ctrlKey || event.altKey || event.metaKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.matches('input, textarea, select, [contenteditable="true"]')) return;
+      const now = Date.now();
+      if (now - lastScanKeyAt.current > 120) scanBuffer.current = '';
+      lastScanKeyAt.current = now;
+      if (event.key === 'Enter') {
+        if (scanBuffer.current.length >= 3) {
+          event.preventDefault();
+          const code = scanBuffer.current;
+          scanBuffer.current = '';
+          openBarcode(code);
+        }
+        return;
+      }
+      if (event.key.length === 1) scanBuffer.current += event.key;
+    };
+    window.addEventListener('keydown', receiveScanner);
+    return () => window.removeEventListener('keydown', receiveScanner);
+  }, [items, selected, history]);
+
   if (!session) {
     return <Page title="นับสต็อก" subtitle="สร้างสาขาและรอบนับจากเมนูไฟล์รายการเคลื่อนไหวก่อน">
       <section className="panel"><Empty text="ยังไม่มีรอบนับที่กำลังใช้งาน กรุณาสร้างสาขาก่อนนำเข้าไฟล์รายการเคลื่อนไหว"/></section>
@@ -150,13 +197,28 @@ export default function StockCountPage(){
     setTimeout(() => setToast(''), 2500);
   };
 
+  const finishWork = async() => {
+    try {
+      setFinishing(true);
+      await exportCountSession(session,items,transactions);
+      await auditRepository.closeSession(session.id!);
+      localStorage.removeItem('audit-selected-session');
+      location.assign('/count-history');
+    } catch (reason) {
+      setFinishConfirm(false);
+      setToast(reason instanceof Error?reason.message:'ไม่สามารถจบงานได้');
+      setFinishing(false);
+    }
+  };
+
   return <Page title="นับสต็อก" subtitle="เลือกสาขา ค้นหมวดหมู่ แล้วแตะรายการเพื่อบันทึกยอด">
     <StockCountHeader session={session} total={items.length} counted={new Set(transactions.map(t => normalizeCode(t.productCode))).size}/>
 
     <div className="mt-5 grid gap-5 xl:grid-cols-[1.6fr_1fr]">
       <section className="panel">
-        <div className="stock-filters grid gap-3">
+        <div className="stock-filters grid gap-3" onKeyDown={event=>{if(event.key==='Enter'&&event.target instanceof HTMLInputElement){event.preventDefault();openBarcode(query)}}}>
           <label className="input-shell"><Search/><input value={query} onChange={e => setQuery(e.target.value)} placeholder="ค้นหาชื่อสินค้า / รหัสสินค้า / หมวดหมู่"/></label>
+          <button type="button" className="btn-secondary barcode-focus-button" onClick={()=>{const input=document.querySelector<HTMLInputElement>('.stock-filters input');input?.focus();input?.select();setToast('พร้อมรับบาร์โค้ด ยิงบาร์โค้ดได้เลย');window.setTimeout(()=>setToast(''),2500)}}><ScanBarcode/>พร้อมยิงบาร์โค้ด</button>
           <select className="input" value={category} onChange={e => setCategory(e.target.value)}>
             <option value="all">ทุกหมวดหมู่</option>
             {categories.map(name => <option key={name} value={name}>{name}</option>)}
@@ -193,7 +255,8 @@ export default function StockCountPage(){
         <section className="panel">
           <h2 className="section-title">จัดการรอบนับ</h2>
           <div className="grid gap-2">
-            <button className="btn-primary" onClick={doExport}><Download/>Export Excel</button>
+            <button className="btn-primary" onClick={()=>setFinishConfirm(true)} disabled={finishing}><CheckCircle2/>{finishing?'กำลังจบงาน...':'จบงานและเก็บประวัติ'}</button>
+            <button className="btn-secondary" onClick={doExport}><Download/>Export Excel</button>
             <button className="btn-secondary" onClick={doBackup}><Download/>Backup JSON</button>
             <button className="btn-secondary" onClick={() => document.getElementById('recent')?.scrollIntoView({behavior:'smooth'})}><History/>ดูประวัติการนับ</button>
             <button className="btn-secondary" onClick={() => location.assign('/movement')}><Plus/>เริ่มรอบนับใหม่</button>
@@ -208,6 +271,7 @@ export default function StockCountPage(){
     {selected && <CountStepModal item={selected} transactions={transactions.filter(t => normalizeCode(t.productCode) === normalizeCode(selected.productCode))} auditor={session.auditorName} onClose={() => setSelected(undefined)} onSave={save}/>}
     {history && <CountHistoryDrawer item={history} transactions={transactions.filter(t => normalizeCode(t.productCode) === normalizeCode(history.productCode))} onClose={() => setHistory(undefined)}/>}
     <ConfirmDialog open={clear} title="ล้างข้อมูลรอบปัจจุบัน?" detail="รายการสินค้าและประวัติการนับในรอบนี้จะถูกลบ การกระทำนี้ย้อนกลับไม่ได้" onCancel={() => setClear(false)} onConfirm={async() => {await auditRepository.clearSession(session.id!);setClear(false);setToast('ล้างข้อมูลรอบปัจจุบันแล้ว')}}/>
+    <ConfirmDialog open={finishConfirm} title="ยืนยันจบงานนับสต็อก?" detail="ระบบจะสร้างไฟล์ Excel ปิดรอบนับ และย้ายข้อมูลไปเมนูประวัติการนับสินค้า หลังจบงานจะเพิ่มรายการนับในรอบนี้ไม่ได้" onCancel={()=>!finishing&&setFinishConfirm(false)} onConfirm={()=>void finishWork()}/>
     <Toast message={toast}/>
   </Page>;
 }
