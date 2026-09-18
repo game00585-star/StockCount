@@ -122,22 +122,36 @@ async function listChunkDocuments() {
   return all;
 }
 
+async function markMissingCloudTablesForUpload() {
+  if (!navigator.onLine) return;
+  const documents = await listChunkDocuments();
+  const cloudTables = new Set(documents.map(document => document.fields?.table?.stringValue).filter(Boolean));
+  for (const tableName of tableNames) {
+    if (cloudTables.has(tableName)) continue;
+    if (await db.table(tableName).count()) dirtyTables.add(tableName);
+  }
+  persistPendingTables();
+}
+
 function makeChunks(records: unknown[]) {
   const chunks: string[] = [];
-  let current: unknown[] = [];
+  let parts: string[] = [];
+  let currentBytes = 2;
+  const encoder = new TextEncoder();
 
   for (const record of records) {
-    const next = [...current, record];
-    const payload = serialize(next);
-    if (new TextEncoder().encode(payload).byteLength > maxPayloadBytes && current.length) {
-      chunks.push(serialize(current));
-      current = [record];
-    } else {
-      current = next;
+    const part = serialize(record);
+    const partBytes = encoder.encode(part).byteLength + (parts.length ? 1 : 0);
+    if (currentBytes + partBytes > maxPayloadBytes && parts.length) {
+      chunks.push(`[${parts.join(',')}]`);
+      parts = [];
+      currentBytes = 2;
     }
+    parts.push(part);
+    currentBytes += partBytes;
   }
 
-  chunks.push(serialize(current));
+  chunks.push(`[${parts.join(',')}]`);
   return chunks;
 }
 
@@ -165,21 +179,22 @@ async function pullFirestoreToLocal() {
     // Merge missing remote rows and only replace a local row when the remote row
     // has a newer updatedAt value. This keeps offline/local counts from vanishing.
     const table = db.table(tableName);
-    await db.transaction('rw', table, async () => {
-      for (const record of records as Array<Record<string,unknown>>) {
-        const keyPath = table.schema.primKey.keyPath;
-        const key = typeof keyPath === 'string' ? record[keyPath] : undefined;
-        if (typeof key !== 'string' && typeof key !== 'number') continue;
-        const local = await table.get(key) as Record<string,unknown> | undefined;
-        if (!local) {
-          await table.put(record);
-          continue;
-        }
-        const remoteUpdated = record.updatedAt ? +new Date(record.updatedAt as string | Date) : 0;
-        const localUpdated = local.updatedAt ? +new Date(local.updatedAt as string | Date) : 0;
-        if (remoteUpdated && remoteUpdated > localUpdated) await table.put(record);
-      }
+    const remoteRecords=(records as Array<Record<string,unknown>>).filter(record=>{
+      const keyPath=table.schema.primKey.keyPath;
+      const key=typeof keyPath==='string'?record[keyPath]:undefined;
+      return typeof key==='string'||typeof key==='number';
     });
+    const keyPath=table.schema.primKey.keyPath as string;
+    const keys=remoteRecords.map(record=>record[keyPath] as string|number);
+    const locals=await table.bulkGet(keys) as Array<Record<string,unknown>|undefined>;
+    const toPut=remoteRecords.filter((record,index)=>{
+      const local=locals[index];
+      if(!local)return true;
+      const remoteUpdated=record.updatedAt?+new Date(record.updatedAt as string|Date):0;
+      const localUpdated=local.updatedAt?+new Date(local.updatedAt as string|Date):0;
+      return !!remoteUpdated&&remoteUpdated>localUpdated;
+    });
+    if(toPut.length)await table.bulkPut(toPut);
   }
 }
 
@@ -196,6 +211,7 @@ async function pushTablesToFirestore(tables: Iterable<TableName>) {
   const failures:string[]=[];
   for (const tableName of tableList) {
     try {
+      await new Promise<void>(resolve=>window.setTimeout(resolve,0));
       const records = await db.table(tableName).toArray();
       const chunks = makeChunks(records);
       const keepIds = new Set(chunks.map((_payload, index) => chunkId(tableName, index)));
@@ -301,6 +317,8 @@ export async function initializeCloudData() {
   try {
     if (dirtyTables.size) await syncAllToFirestore();
     await pullFirestoreToLocal();
+    await markMissingCloudTablesForUpload();
+    if (dirtyTables.size) await syncAllToFirestore();
   } catch (error) {
     console.error('Firebase sync unavailable; continuing with local data.', error);
   }
