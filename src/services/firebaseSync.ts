@@ -168,8 +168,6 @@ async function pullFirestoreToLocal() {
   }
 
   for (const [tableName, tableChunks] of byTable) {
-    // Local changes made while offline always win. Do not overwrite them before upload.
-    if (dirtyTables.has(tableName)) continue;
     const records = tableChunks
       .sort((a, b) => Number(a.fields?.chunkIndex?.integerValue || 0) - Number(b.fields?.chunkIndex?.integerValue || 0))
       .flatMap(document => deserialize(document.fields?.payload?.stringValue || '[]'));
@@ -315,7 +313,8 @@ export async function initializeCloudData() {
   }
 
   try {
-    if (dirtyTables.size) await syncAllToFirestore();
+    // Cloud-first merge is required for a second device. Local rows still win
+    // conflicts, but missing cloud rows are added before any full-table upload.
     await pullFirestoreToLocal();
     await markMissingCloudTablesForUpload();
     if (dirtyTables.size) await syncAllToFirestore();
