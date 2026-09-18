@@ -2,6 +2,7 @@ import {db} from '../db/database';
 import type {CountSession,CountTransaction,ParsedMovement,ParsedProduct} from '../types';
 import {createSessionNumber} from '../utils/stock';
 import {deleteFirestoreRows, queueFirestoreSync} from './firebaseSync';
+import {getCurrentUser} from './authService';
 
 export const auditRepository={
   async saveAllowance(fileName:string,rows:ParsedProduct[],by='ผู้ใช้งาน'){
@@ -9,6 +10,14 @@ export const auditRepository={
     await db.transaction('rw',db.products,db.allowanceImports,async()=>{
       await db.products.bulkPut(valid.map(r=>({productCode:r.productCode,productName:r.productName,unit:r.unit,categoryCode:r.categoryCode,categoryName:r.categoryName,isActive:true,createdAt:now,updatedAt:now})));
       await db.allowanceImports.add({fileName,totalRows:rows.length,insertedCount:rows.filter(r=>r.status==='insert').length,updatedCount:rows.filter(r=>r.status==='update').length,skippedCount:rows.filter(r=>r.status==='skip').length,duplicateCount:rows.filter(r=>r.status==='duplicate').length,invalidCount:rows.filter(r=>r.status==='invalid').length,importedAt:now,importedBy:by});
+    });
+    queueFirestoreSync(['products','allowanceImports']);
+  },
+  async clearAllowance(){
+    if(getCurrentUser()?.role!=='ADMIN')throw new Error('เฉพาะผู้ดูแลระบบ (Admin) เท่านั้นที่ลบข้อมูล Allowance ได้');
+    await db.transaction('rw',db.products,db.allowanceImports,async()=>{
+      await db.products.clear();
+      await db.allowanceImports.clear();
     });
     queueFirestoreSync(['products','allowanceImports']);
   },
