@@ -1,3 +1,4 @@
+import Dexie from 'dexie';
 import {db} from '../db/database';
 import {getCurrentUser, type AuthUser} from './authService';
 import {queueFirestoreSync} from './firebaseSync';
@@ -42,7 +43,7 @@ export async function restoreBackup(preview:BackupPreview,actor:AuthUser|undefin
   if(!actor||actor.role!=='ADMIN')throw new Error('เฉพาะผู้ดูแลระบบ (Admin) เท่านั้นที่กู้คืนข้อมูลได้');
   await backupCurrent();
   const tables=backupTableNames.map(name=>db.table(name));
-  await db.transaction('rw',tables,async()=>{for(const name of backupTableNames)await db.table(name).clear();for(const name of backupTableNames)if(preview.document.data[name].length)await db.table(name).bulkPut(preview.document.data[name])});
-  localStorage.removeItem('audit-selected-session');
+  // Merge conservatively: existing permanent keys win. Never clear or silently replace the current database.
+  await db.transaction('rw',tables,async()=>{for(const name of backupTableNames){const table=db.table(name),keyPath=table.schema.primKey.keyPath as string;for(const row of preview.document.data[name] as Record<string,unknown>[]){const key=row[keyPath];if(key!==undefined&&await table.get(key as string|number))continue;try{await table.add(row)}catch(error){if(!(error instanceof Dexie.ConstraintError))throw error}}}});
   queueFirestoreSync([...backupTableNames.filter(name=>name!=='exportRecords')]);
 }

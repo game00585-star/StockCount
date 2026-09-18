@@ -1,0 +1,7 @@
+import {InteractionRequiredAuthError,PublicClientApplication} from '@azure/msal-browser';
+import {isSharePointConfigured,sharePointConfig} from '../config/sharePointConfig';
+let client:PublicClientApplication|undefined;
+async function getClient(){if(!isSharePointConfigured())throw new Error('ยังไม่ได้ตั้งค่าการเชื่อมต่อ Microsoft');if(!client){client=new PublicClientApplication({auth:{clientId:sharePointConfig.clientId,authority:`https://login.microsoftonline.com/${sharePointConfig.tenantId}`,redirectUri:sharePointConfig.redirectUri},cache:{cacheLocation:'sessionStorage'}});await client.initialize()}return client}
+export async function connectMicrosoft(){const app=await getClient();const result=await app.loginPopup({scopes:sharePointConfig.scopes,prompt:'select_account'});app.setActiveAccount(result.account);return result.account?.username||''}
+export async function getGraphToken(){const app=await getClient();const account=app.getActiveAccount()||app.getAllAccounts()[0];if(!account)throw new Error('MICROSOFT_LOGIN_REQUIRED');app.setActiveAccount(account);try{return(await app.acquireTokenSilent({account,scopes:sharePointConfig.scopes})).accessToken}catch(error){if(error instanceof InteractionRequiredAuthError)throw new Error('MICROSOFT_LOGIN_REQUIRED');throw error}}
+export async function disconnectMicrosoft(){const app=await getClient();const account=app.getActiveAccount()||app.getAllAccounts()[0];if(account)await app.logoutPopup({account})}
