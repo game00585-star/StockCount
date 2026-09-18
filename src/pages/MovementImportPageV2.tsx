@@ -45,7 +45,18 @@ export default function MovementImportPageV2(){
     try{const parsed=matchMovementWithProducts(parseMovementWorkbook(await input.arrayBuffer()),products);setFile(input.name);setRows(parsed);setPage(1);setMessage(`พบใน Allowance ${parsed.filter(row=>row.matched).length} รายการ`);}
     catch(error){setRows([]);setMessage(error instanceof Error?error.message:'อ่านไฟล์ไม่สำเร็จ');}
   };
-  const useAllAllowance=()=>{
+  const useAllAllowance=async()=>{
+    if(!active?.id)return;
+    const activeCount=products.filter(product=>product.isActive).length;
+    if(!activeCount){setMessage('ยังไม่มีข้อมูล Allowance กรุณานำเข้าไฟล์ Allowance ก่อน');return;}
+    try{
+      setSaving(true);
+      await auditRepository.useAllowanceForSession(active.id,activeCount);
+      localStorage.setItem(sessionKey,String(active.id));
+      nav('/count');
+      return;
+    }catch(error){setMessage(error instanceof Error?error.message:'ไม่สามารถอ้างอิงข้อมูล Allowance ได้');return;}
+    finally{setSaving(false);}
     if(!products.length){setMessage('ยังไม่มีข้อมูล Allowance กรุณานำเข้าไฟล์ Allowance ก่อน');return;}
     const allowanceRows:ParsedMovement[]=products.filter(product=>product.isActive).map((product,index)=>({
       row:index+1,

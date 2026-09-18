@@ -15,6 +15,7 @@ import {CountHistoryDrawer,CountStepModal,ProductCountCard,RecentCountHistory,St
 import {PageSizeControl,usePageSize} from '../components/PageSizeControl';
 import {Empty,Page} from './AllowanceImportPage';
 import {canAccessBranch, filterSessionsByUser, getCurrentUser} from '../services/authService';
+import {resolveSessionItems} from '../services/sessionItems';
 
 const UNCATEGORIZED = 'ไม่ระบุหมวด';
 const normalizeCode = (value: unknown) => String(value ?? '').trim();
@@ -43,7 +44,7 @@ export default function StockCountPage(){
     },
     [selectedSessionId, currentUser?.username]
   );
-  const items = useLiveQuery(
+  const storedItems = useLiveQuery(
     () => session?.id ? db.countSessionItems.where('sessionId').equals(session.id).toArray() : [],
     [session?.id]
   ) || [];
@@ -52,6 +53,7 @@ export default function StockCountPage(){
     [session?.id]
   ) || [];
   const products = useLiveQuery(() => db.products.toArray(), []) || [];
+  const items = useMemo(() => resolveSessionItems(session, storedItems, products), [session, storedItems, products]);
 
   const [query,setQuery] = useState('');
   const [filter,setFilter] = useState('all');
@@ -88,13 +90,22 @@ export default function StockCountPage(){
     });
     return [...set].sort((a,b) => a.localeCompare(b, 'th'));
   }, [items, productByCode]);
+  const transactionsByCode = useMemo(() => {
+    const map = new Map<string, typeof transactions>();
+    transactions.forEach(transaction => {
+      const code = normalizeCode(transaction.productCode);
+      const group = map.get(code);
+      if (group) group.push(transaction); else map.set(code, [transaction]);
+    });
+    return map;
+  }, [transactions]);
 
   const rows = useMemo(() => items.map(item => {
     const itemCode = normalizeCode(item.productCode);
     const product = productByCode.get(itemCode);
     const categoryName = (product?.categoryName || getItemCategory(item) || UNCATEGORIZED).trim() || UNCATEGORIZED;
     const categoryKey = normalizeText(categoryName);
-    const tx = transactions.filter(t => normalizeCode(t.productCode) === itemCode);
+    const tx = transactionsByCode.get(itemCode) || [];
     const total = tx.reduce((sum,t) => sum + t.signedQuantity, 0);
     const latest = [...tx].sort((a,b) => +new Date(b.countedAt) - +new Date(a.countedAt))[0];
     return {item, itemCode, categoryName, categoryKey, tx, total, latest};
@@ -118,7 +129,7 @@ export default function StockCountPage(){
       if (sort === 'za') return b.item.productNameSnapshot.localeCompare(a.item.productNameSnapshot, 'th');
       if (sort === 'az') return a.item.productNameSnapshot.localeCompare(b.item.productNameSnapshot, 'th');
       return a.categoryName.localeCompare(b.categoryName, 'th') || a.item.productNameSnapshot.localeCompare(b.item.productNameSnapshot, 'th');
-    }), [items, transactions, productByCode, query, category, filter, sort]);
+    }), [items, transactionsByCode, productByCode, query, category, filter, sort]);
 
   const openBarcode = (rawCode:string) => {
     const code = normalizeCode(rawCode);

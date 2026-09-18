@@ -8,6 +8,7 @@ import {auditRepository} from '../services/auditRepository';
 import {downloadExportRecord,exportCountSession} from '../services/exportService';
 import {Page,Empty} from './AllowanceImportPage';
 import {PageSizeControl,usePageSize} from '../components/PageSizeControl';
+import {resolveSessionItems} from '../services/sessionItems';
 
 export default function CountHistoryPage(){
  const user=getCurrentUser();
@@ -23,10 +24,13 @@ export default function CountHistoryPage(){
  const[sessionPage,setSessionPage]=useState(1);
  const[detailPage,setDetailPage]=useState(1);
  const selected=sessions.find(s=>s.id===selectedId);
- const items=useLiveQuery(()=>selectedId?db.countSessionItems.where('sessionId').equals(selectedId).toArray():[],[selectedId])||[];
+ const storedItems=useLiveQuery(()=>selectedId?db.countSessionItems.where('sessionId').equals(selectedId).toArray():[],[selectedId])||[];
+ const products=useLiveQuery(()=>db.products.toArray(),[])||[];
+ const items=useMemo(()=>resolveSessionItems(selected,storedItems,products),[selected,storedItems,products]);
  const transactions=useLiveQuery(()=>selectedId?db.countTransactions.where('sessionId').equals(selectedId).toArray():[],[selectedId])||[];
  const exports=useLiveQuery(()=>selectedId?db.exportRecords.where('sessionId').equals(selectedId).reverse().sortBy('createdAt'):[],[selectedId])||[];
- const rows=useMemo(()=>items.map(item=>{const tx=transactions.filter(t=>t.productCode===item.productCode),ordered=[...tx].sort((a,b)=>+new Date(b.countedAt)-+new Date(a.countedAt));return{item,total:tx.reduce((sum,t)=>sum+t.signedQuantity,0),attempts:tx.length,last:ordered[0]}}),[items,transactions]);
+ const transactionsByCode=useMemo(()=>{const map=new Map<string,typeof transactions>();transactions.forEach(transaction=>{const group=map.get(transaction.productCode);if(group)group.push(transaction);else map.set(transaction.productCode,[transaction])});return map},[transactions]);
+ const rows=useMemo(()=>items.map(item=>{const tx=transactionsByCode.get(item.productCode)||[],ordered=[...tx].sort((a,b)=>+new Date(b.countedAt)-+new Date(a.countedAt));return{item,total:tx.reduce((sum,t)=>sum+t.signedQuantity,0),attempts:tx.length,last:ordered[0]}}),[items,transactionsByCode]);
  const download=async(session:CountSession)=>{const existing=exports[0];if(existing)return downloadExportRecord(existing);await exportCountSession(session,items,transactions)};
  const openDelete=(session:CountSession)=>{setDeleteTarget(session);setCredentials({username:user?.username||'',password:''});setDeleteError('')};
  const closeDelete=()=>{if(deleting)return;setDeleteTarget(undefined);setCredentials({username:user?.username||'',password:''});setDeleteError('')};

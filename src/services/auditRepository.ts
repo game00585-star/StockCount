@@ -42,7 +42,7 @@ export const auditRepository={
   },
   async addMovement(fileName:string,rows:ParsedMovement[],session:CountSession,by:string){
     const now=new Date();
-    const importId=await db.transaction('rw',db.movementImports,db.movementItems,db.countSessionItems,async()=>{
+    const importId=await db.transaction('rw',db.movementImports,db.movementItems,db.countSessionItems,db.countSessions,async()=>{
       const importId=Number(await db.movementImports.add({fileName,branchName:session.branchName,totalRows:rows.length,matchedCount:rows.filter(r=>r.matched).length,unmatchedCount:rows.filter(r=>!r.matched&&r.status==='valid').length,duplicateCount:rows.filter(r=>r.status==='duplicate').length,invalidCount:rows.filter(r=>r.status==='invalid').length,importedAt:now,importedBy:by}));
       await db.movementItems.bulkAdd(rows.map(r=>({movementImportId:importId,productCode:r.productCode,sourceProductName:r.sourceProductName,sourceUnit:r.sourceUnit,sourceBalance:r.sourceBalance,matched:!!r.matched,matchReason:r.matchReason||'',createdAt:now})));
       for(const r of rows.filter(r=>r.selected&&r.matched&&r.product)){
@@ -50,8 +50,23 @@ export const auditRepository={
         const data={sessionId:session.id!,productCode:r.productCode,productNameSnapshot:r.product!.productName,unitSnapshot:r.product!.unit,sourceBalance:r.sourceBalance,addedAt:existing?.addedAt||now};
         if(existing?.id)await db.countSessionItems.update(existing.id,data);else await db.countSessionItems.add(data);
       }
+      await db.countSessions.update(session.id!,{itemSource:'MOVEMENT',movementImportId:importId,movementFileName:fileName,updatedAt:now});
       return importId;
-    });queueFirestoreSync(['movementImports','movementItems','countSessionItems']);return importId;
+    });queueFirestoreSync(['movementImports','movementItems','countSessionItems','countSessions']);return importId;
+  },
+  async useAllowanceForSession(sessionId:number,productCount:number){
+    const session=await db.countSessions.get(sessionId);
+    if(!session)throw new Error('ไม่พบรอบนับที่ต้องการ');
+    const transactionCount=await db.countTransactions.where('sessionId').equals(sessionId).count();
+    if(transactionCount>0&&session.itemSource!=='ALLOWANCE')throw new Error('รอบนี้เริ่มนับแล้ว จึงไม่สามารถเปลี่ยนแหล่งรายการสินค้าได้');
+    const now=new Date();
+    const oldItemKeys=await db.countSessionItems.where('sessionId').equals(sessionId).primaryKeys();
+    await db.transaction('rw',db.countSessions,db.countSessionItems,async()=>{
+      await db.countSessionItems.where('sessionId').equals(sessionId).delete();
+      await db.countSessions.update(sessionId,{itemSource:'ALLOWANCE',allowanceProductCount:productCount,allowanceReferencedAt:now,movementImportId:undefined,movementFileName:undefined,updatedAt:now});
+    });
+    if(oldItemKeys.length)await deleteFirestoreRows(oldItemKeys.map(key=>({table:'countSessionItems',key})));
+    queueFirestoreSync(['countSessions','countSessionItems']);
   },
   async addTransaction(input:Omit<CountTransaction,'id'|'createdAt'>){await db.countTransactions.add({...input,createdAt:new Date()});await db.countSessions.update(input.sessionId,{updatedAt:new Date()});queueFirestoreSync(['countTransactions','countSessions']);},
   async closeSession(sessionId:number){
