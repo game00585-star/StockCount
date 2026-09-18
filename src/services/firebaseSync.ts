@@ -1,4 +1,5 @@
 import {db} from '../db/database';
+import {getFirebaseIdToken} from './firebaseAuth';
 
 const projectId = 'audit-stock-count';
 const apiKey = 'AIzaSyD193e6G62EHa7nP0w2i-YLCPGe6Z3bOEU';
@@ -38,6 +39,7 @@ const pendingStorageKey = 'audit-stock-pending-sync-v1';
 let activeSync: Promise<void> | undefined;
 let queuedTimer: number | undefined;
 let onlineListenerInstalled = false;
+let blockedUntil = 0;
 const dirtyTables = new Set<TableName>(loadPendingTables());
 
 function isTableName(value: string): value is TableName {
@@ -90,8 +92,16 @@ function chunkId(table: string, index: number) {
 }
 
 async function request(url: string, init?: RequestInit) {
-  const response = await fetch(`${url}${url.includes('?') ? '&' : '?'}key=${apiKey}`, init);
-  if (!response.ok) throw new Error(`Firebase ${response.status}: ${await response.text()}`);
+  if (Date.now() < blockedUntil) throw new Error('Firebase sync is temporarily paused after an authorization error.');
+  const idToken = await getFirebaseIdToken();
+  const response = await fetch(`${url}${url.includes('?') ? '&' : '?'}key=${apiKey}`, {
+    ...init,
+    headers: {...init?.headers, Authorization: `Bearer ${idToken}`}
+  });
+  if (!response.ok) {
+    if (response.status === 401 || response.status === 403) blockedUntil = Date.now() + 5 * 60_000;
+    throw new Error(`Firebase ${response.status}: ${await response.text()}`);
+  }
   return response.status === 204 ? undefined : response.json();
 }
 
@@ -200,14 +210,14 @@ async function pushTablesToFirestore(tables: Iterable<TableName>) {
 
 export async function syncAllToFirestore() {
   if (activeSync) return activeSync;
-  if (!navigator.onLine || !dirtyTables.size) return;
+  if (!navigator.onLine || !dirtyTables.size || Date.now() < blockedUntil) return;
 
   activeSync = (async () => {
     try {
       await pushTablesToFirestore([...dirtyTables]);
     } catch (error) {
       console.error('Firebase sync failed; data remains safely stored on this device.', error);
-      window.setTimeout(() => {
+      if (Date.now() >= blockedUntil) window.setTimeout(() => {
         if (navigator.onLine && dirtyTables.size) queueFirestoreSync([], 0);
       }, 15000);
     } finally {
@@ -235,6 +245,7 @@ export function queueFirestoreSync(tablesOrDelay?: TableName[] | number, delay =
 }
 
 export async function refreshFromFirestore() {
+  if (Date.now() < blockedUntil) return;
   try {
     await pullFirestoreToLocal();
   } catch (error) {
