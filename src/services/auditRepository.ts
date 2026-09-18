@@ -2,7 +2,21 @@ import {db} from '../db/database';
 import type {CountSession,CountTransaction,ParsedMovement,ParsedProduct} from '../types';
 import {createSessionNumber} from '../utils/stock';
 import {deleteFirestoreRows, queueFirestoreSync} from './firebaseSync';
-import {getCurrentUser} from './authService';
+import {getCurrentUser,verifyHistoryDeleteCredentials} from './authService';
+
+async function deleteSessionData(sessionId:number){
+  const itemKeys=await db.countSessionItems.where('sessionId').equals(sessionId).primaryKeys();
+  const transactionKeys=await db.countTransactions.where('sessionId').equals(sessionId).primaryKeys();
+  const exportKeys=await db.exportRecords.where('sessionId').equals(sessionId).primaryKeys();
+  await db.transaction('rw',db.countSessions,db.countSessionItems,db.countTransactions,db.exportRecords,async()=>{await db.countSessionItems.where('sessionId').equals(sessionId).delete();await db.countTransactions.where('sessionId').equals(sessionId).delete();await db.exportRecords.where('sessionId').equals(sessionId).delete();await db.countSessions.delete(sessionId);});
+  await deleteFirestoreRows([
+    {table:'countSessions',key:sessionId},
+    ...itemKeys.map(key=>({table:'countSessionItems',key})),
+    ...transactionKeys.map(key=>({table:'countTransactions',key})),
+    ...exportKeys.map(key=>({table:'exportRecords',key}))
+  ]);
+  queueFirestoreSync(['countSessions','countSessionItems','countTransactions']);
+}
 
 export const auditRepository={
   async saveAllowance(fileName:string,rows:ParsedProduct[],by='ผู้ใช้งาน'){
@@ -58,16 +72,15 @@ export const auditRepository={
     queueFirestoreSync(['countSessionItems','countTransactions']);
   },
   async deleteSession(sessionId:number){
-    const itemKeys=await db.countSessionItems.where('sessionId').equals(sessionId).primaryKeys();
-    const transactionKeys=await db.countTransactions.where('sessionId').equals(sessionId).primaryKeys();
-    const exportKeys=await db.exportRecords.where('sessionId').equals(sessionId).primaryKeys();
-    await db.transaction('rw',db.countSessions,db.countSessionItems,db.countTransactions,db.exportRecords,async()=>{await db.countSessionItems.where('sessionId').equals(sessionId).delete();await db.countTransactions.where('sessionId').equals(sessionId).delete();await db.exportRecords.where('sessionId').equals(sessionId).delete();await db.countSessions.delete(sessionId);});
-    await deleteFirestoreRows([
-      {table:'countSessions',key:sessionId},
-      ...itemKeys.map(key=>({table:'countSessionItems',key})),
-      ...transactionKeys.map(key=>({table:'countTransactions',key})),
-      ...exportKeys.map(key=>({table:'exportRecords',key}))
-    ]);
-    queueFirestoreSync(['countSessions','countSessionItems','countTransactions']);
+    const session=await db.countSessions.get(sessionId);
+    if(session?.status==='CLOSED')throw new Error('รอบที่จบงานแล้วต้องลบผ่านเมนูประวัติการนับสินค้า');
+    await deleteSessionData(sessionId);
+  },
+  async deleteClosedSession(sessionId:number,username:string,password:string){
+    const session=await db.countSessions.get(sessionId);
+    if(!session)throw new Error('ไม่พบประวัติการนับที่ต้องการลบ');
+    if(session.status!=='CLOSED')throw new Error('ลบได้เฉพาะรอบที่จบงานแล้ว');
+    await verifyHistoryDeleteCredentials(username,password,session.branchName);
+    await deleteSessionData(sessionId);
   }
 };

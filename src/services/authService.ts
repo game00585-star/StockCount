@@ -69,6 +69,19 @@ export async function login(username: string, password: string) {
   return withoutPassword(user);
 }
 
+export async function verifyHistoryDeleteCredentials(username: string, password: string, branchName: string) {
+  await ensureDefaultAdmin();
+  const user = await db.auditUsers.where('username').equals(normalize(username)).first();
+  if (!user || !user.isActive || user.password !== password) {
+    throw new Error('Username หรือ Password ไม่ถูกต้อง');
+  }
+  const ownsBranch = user.allowedBranches.some(branch => branch === '*' || sameBranch(branch, branchName));
+  if (user.role !== 'ADMIN' && !ownsBranch) {
+    throw new Error(`บัญชีนี้ไม่มีสิทธิ์ลบประวัติของสาขา ${branchName}`);
+  }
+  return withoutPassword(user);
+}
+
 export function canAccessBranch(user: AuthUser | undefined, branchName: string) {
   if (!user) return false;
   if (user.role === 'ADMIN') return true;

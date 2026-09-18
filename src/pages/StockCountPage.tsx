@@ -1,7 +1,8 @@
 ﻿import {useMemo,useState} from 'react';
 import {useLiveQuery} from 'dexie-react-hooks';
 import {useEffect,useRef} from 'react';
-import {CheckCircle2,Download,History,Plus,ScanBarcode,Search,Trash2} from 'lucide-react';
+import {BrowserMultiFormatReader,type IScannerControls} from '@zxing/browser';
+import {Camera,CheckCircle2,Download,History,Plus,Search,Trash2,X} from 'lucide-react';
 import {db} from '../db/database';
 import type {CountSessionItem} from '../types';
 import {auditRepository} from '../services/auditRepository';
@@ -61,8 +62,12 @@ export default function StockCountPage(){
   const [finishConfirm,setFinishConfirm] = useState(false);
   const [finishing,setFinishing] = useState(false);
   const [toast,setToast] = useState('');
+  const [scannerOpen,setScannerOpen] = useState(false);
+  const [scannerError,setScannerError] = useState('');
   const scanBuffer = useRef('');
   const lastScanKeyAt = useRef(0);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const scannerControls = useRef<IScannerControls | undefined>(undefined);
 
   const productByCode = useMemo(() => {
     const map = new Map<string, (typeof products)[number]>();
@@ -154,6 +159,41 @@ export default function StockCountPage(){
     return () => window.removeEventListener('keydown', receiveScanner);
   }, [items, selected, history]);
 
+  useEffect(() => {
+    if (!scannerOpen || !videoRef.current) return;
+    let disposed = false;
+    const reader = new BrowserMultiFormatReader(undefined, {delayBetweenScanAttempts: 120});
+    setScannerError('');
+    reader.decodeFromConstraints(
+      {audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}},
+      videoRef.current,
+      result => {
+        if (!result || disposed) return;
+        const code = result.getText();
+        scannerControls.current?.stop();
+        scannerControls.current = undefined;
+        setScannerOpen(false);
+        openBarcode(code);
+      }
+    ).then(controls => {
+      if (disposed) controls.stop();
+      else scannerControls.current = controls;
+    }).catch(error => {
+      if (disposed) return;
+      const name = error instanceof Error ? error.name : '';
+      setScannerError(name === 'NotAllowedError'
+        ? 'ไม่ได้รับอนุญาตให้ใช้กล้อง กรุณาอนุญาต Camera ในการตั้งค่าเว็บไซต์'
+        : name === 'NotFoundError'
+          ? 'ไม่พบกล้องบนอุปกรณ์นี้'
+          : 'เปิดกล้องไม่สำเร็จ กรุณาใช้ HTTPS และตรวจสอบสิทธิ์กล้อง');
+    });
+    return () => {
+      disposed = true;
+      scannerControls.current?.stop();
+      scannerControls.current = undefined;
+    };
+  }, [scannerOpen, items]);
+
   if (!session) {
     return <Page title="นับสต็อก" subtitle="สร้างสาขาและรอบนับจากเมนูไฟล์รายการเคลื่อนไหวก่อน">
       <section className="panel"><Empty text="ยังไม่มีรอบนับที่กำลังใช้งาน กรุณาสร้างสาขาก่อนนำเข้าไฟล์รายการเคลื่อนไหว"/></section>
@@ -217,8 +257,7 @@ export default function StockCountPage(){
     <div className="mt-5 grid gap-5 xl:grid-cols-[1.6fr_1fr]">
       <section className="panel">
         <div className="stock-filters grid gap-3" onKeyDown={event=>{if(event.key==='Enter'&&event.target instanceof HTMLInputElement){event.preventDefault();openBarcode(query)}}}>
-          <label className="input-shell"><Search/><input value={query} onChange={e => setQuery(e.target.value)} placeholder="ค้นหาชื่อสินค้า / รหัสสินค้า / หมวดหมู่"/></label>
-          <button type="button" className="btn-secondary barcode-focus-button" onClick={()=>{const input=document.querySelector<HTMLInputElement>('.stock-filters input');input?.focus();input?.select();setToast('พร้อมรับบาร์โค้ด ยิงบาร์โค้ดได้เลย');window.setTimeout(()=>setToast(''),2500)}}><ScanBarcode/>พร้อมยิงบาร์โค้ด</button>
+          <label className="input-shell barcode-search-shell"><Search/><input value={query} onChange={e => setQuery(e.target.value)} placeholder="ค้นหาชื่อสินค้า / รหัสสินค้า / หมวดหมู่"/><button type="button" className="barcode-camera-button" aria-label="เปิดกล้องสแกนบาร์โค้ด" title="สแกนบาร์โค้ดด้วยกล้อง" onClick={event=>{event.preventDefault();setScannerOpen(true)}}><Camera/></button></label>
           <select className="input" value={category} onChange={e => setCategory(e.target.value)}>
             <option value="all">ทุกหมวดหมู่</option>
             {categories.map(name => <option key={name} value={name}>{name}</option>)}
@@ -270,6 +309,7 @@ export default function StockCountPage(){
 
     {selected && <CountStepModal item={selected} transactions={transactions.filter(t => normalizeCode(t.productCode) === normalizeCode(selected.productCode))} auditor={session.auditorName} onClose={() => setSelected(undefined)} onSave={save}/>}
     {history && <CountHistoryDrawer item={history} transactions={transactions.filter(t => normalizeCode(t.productCode) === normalizeCode(history.productCode))} onClose={() => setHistory(undefined)}/>}
+    {scannerOpen && <div className="modal-backdrop barcode-scanner-backdrop" role="dialog" aria-modal="true" aria-label="สแกนบาร์โค้ด"><div className="modal-card barcode-scanner-card"><div className="barcode-scanner-head"><div><h2>สแกนบาร์โค้ดสินค้า</h2><p>หันกล้องไปที่บาร์โค้ด ระบบจะค้นหาให้อัตโนมัติ</p></div><button type="button" className="barcode-scanner-close" aria-label="ปิดกล้อง" onClick={()=>setScannerOpen(false)}><X/></button></div><div className="barcode-video-wrap"><video ref={videoRef} autoPlay muted playsInline/><div className="barcode-scan-line"/></div>{scannerError&&<div className="backup-danger mt-4" role="alert">{scannerError}</div>}<button type="button" className="btn-secondary full-button mt-4" onClick={()=>setScannerOpen(false)}>ปิดกล้อง</button></div></div>}
     <ConfirmDialog open={clear} title="ล้างข้อมูลรอบปัจจุบัน?" detail="รายการสินค้าและประวัติการนับในรอบนี้จะถูกลบ การกระทำนี้ย้อนกลับไม่ได้" onCancel={() => setClear(false)} onConfirm={async() => {await auditRepository.clearSession(session.id!);setClear(false);setToast('ล้างข้อมูลรอบปัจจุบันแล้ว')}}/>
     <ConfirmDialog open={finishConfirm} title="ยืนยันจบงานนับสต็อก?" detail="ระบบจะสร้างไฟล์ Excel ปิดรอบนับ และย้ายข้อมูลไปเมนูประวัติการนับสินค้า หลังจบงานจะเพิ่มรายการนับในรอบนี้ไม่ได้" onCancel={()=>!finishing&&setFinishConfirm(false)} onConfirm={()=>void finishWork()}/>
     <Toast message={toast}/>
