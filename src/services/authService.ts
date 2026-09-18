@@ -36,7 +36,7 @@ export async function ensureDefaultAdmin() {
     createdAt: now,
     updatedAt: now
   });
-  queueFirestoreSync();
+  queueFirestoreSync(['auditUsers']);
 }
 
 export function getCurrentUser(): AuthUser | undefined {

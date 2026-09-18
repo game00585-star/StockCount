@@ -56,14 +56,14 @@ export default function UserManagementPage() {
       });
       setMessage(`สร้าง User ${form.username} แล้ว`);
     }
-    queueFirestoreSync();
+    queueFirestoreSync(['auditUsers']);
     setForm({username: '', password: '', displayName: '', role: 'USER', allowedBranches: ''});
   };
 
   const remove = async (id?: number) => {
     if (!id || !confirm('ลบ User นี้ใช่หรือไม่?')) return;
     await db.auditUsers.delete(id);
-    queueFirestoreSync();
+    queueFirestoreSync(['auditUsers']);
   };
 
   return <Page title="ผู้ใช้งาน" subtitle="กำหนด User, Password และสาขาที่อนุญาตให้เข้าใช้งาน">
