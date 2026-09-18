@@ -42,6 +42,23 @@ export default function MovementImportPageV2(){
     try{const parsed=matchMovementWithProducts(parseMovementWorkbook(await input.arrayBuffer()),products);setFile(input.name);setRows(parsed);setMessage(`พบใน Allowance ${parsed.filter(row=>row.matched).length} รายการ`);}
     catch(error){setRows([]);setMessage(error instanceof Error?error.message:'อ่านไฟล์ไม่สำเร็จ');}
   };
+  const useAllAllowance=()=>{
+    if(!products.length){setMessage('ยังไม่มีข้อมูล Allowance กรุณานำเข้าไฟล์ Allowance ก่อน');return;}
+    const allowanceRows:ParsedMovement[]=products.filter(product=>product.isActive).map((product,index)=>({
+      row:index+1,
+      productCode:product.productCode,
+      sourceProductName:product.productName,
+      sourceUnit:product.unit,
+      matched:true,
+      matchReason:'อ้างอิงจาก Allowance',
+      product,
+      selected:true,
+      status:'valid'
+    }));
+    setFile(`Allowance-${new Date().toISOString().slice(0,10)}.json`);
+    setRows(allowanceRows);
+    setMessage(`อ้างอิงสินค้าจาก Allowance แล้ว ${allowanceRows.length.toLocaleString('th-TH')} รายการ กรุณาตรวจสอบและกดยืนยันนำไปนับสต็อก`);
+  };
   const useRows=async()=>{
     if(!active||!selectedCount)return;
     try{setSaving(true);await auditRepository.addMovement(file,rows,active,active.auditorName);localStorage.setItem(sessionKey,String(active.id));nav('/count');}
@@ -63,7 +80,7 @@ export default function MovementImportPageV2(){
   </section></Page>;
   return <Page title="ไฟล์รายการเคลื่อนไหว" subtitle="เลือกสาขาก่อนอัปโหลด — A = รหัสสินค้า, C = ชื่อสินค้า, D = หน่วยนับ">
     <section className="mb-5 rounded-2xl bg-slate-950 p-4 text-white"><div className="flex flex-wrap items-center justify-between gap-3"><div><span className="text-xs text-slate-400">สาขาที่เลือก</span><b className="block text-lg">{active.branchName}</b><span className="text-xs text-slate-300">{active.sessionNumber} · {active.auditorName}</span></div><button className="btn-secondary" onClick={()=>{setSelectedId(undefined);localStorage.removeItem(sessionKey);setRows([]);}}>เปลี่ยน/เพิ่มสาขา</button></div></section>
-    <section className="panel"><FileDrop label={`เลือกไฟล์รายการเคลื่อนไหวของ ${active.branchName}`} onFile={handle}/>{rows.length>0&&<>
+    <section className="panel"><FileDrop label={`เลือกไฟล์รายการเคลื่อนไหวของ ${active.branchName}`} onFile={handle}/><div className="movement-allowance-fallback"><div><b>ไม่มีไฟล์รายการเคลื่อนไหว?</b><p>ใช้สินค้าทุกรายการที่พร้อมใช้งานจากไฟล์ Allowance แทนได้</p></div><button type="button" className="btn-secondary" disabled={!products.length||saving} onClick={useAllAllowance}>อ้างอิงสินค้าทั้งหมดจาก Allowance ({products.filter(product=>product.isActive).length.toLocaleString('th-TH')})</button></div>{rows.length>0&&<>
       <div className="mt-5"><MatchSummaryCards items={[{label:'ทั้งหมด',value:rows.length},{label:'พบ Allowance',value:matchedCount},{label:'เลือกไปนับ',value:selectedCount,tone:'text-rose-700'}]}/></div>
       <div className="mt-5 flex flex-wrap gap-2"><button className="btn-quiet" onClick={()=>updateRows(current=>current.map(row=>({...row,selected:!!row.matched})))}>เลือกทั้งหมด ({matchedCount})</button><button className="btn-quiet" onClick={()=>updateRows(current=>current.map(row=>({...row,selected:false})))}>ยกเลิกทั้งหมด</button></div>
       <div className="mt-4"><MovementImportPreview rows={rows} onToggle={index=>updateRows(current=>current.map((row,rowIndex)=>rowIndex===index&&row.matched?{...row,selected:!row.selected}:row))}/></div>

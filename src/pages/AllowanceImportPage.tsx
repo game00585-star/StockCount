@@ -1,12 +1,11 @@
 import {useMemo,useState} from 'react';
 import {useLiveQuery} from 'dexie-react-hooks';
-import {Database,History,Search,TestTube2,Trash2} from 'lucide-react';
+import {Database,History,Search,Trash2} from 'lucide-react';
 import {db} from '../db/database';
 import type {ParsedProduct,Product} from '../types';
 import {compareAllowance,formatThaiDateTime,parseAllowanceWorkbook} from '../utils/stock';
 import {auditRepository} from '../services/auditRepository';
 import {AllowanceImportPreview,FileDrop,MatchSummaryCards} from '../components/ImportUI';
-import {loadDemoData,removeDemoData} from '../data/demo';
 import {ConfirmDialog} from '../components/ConfirmDialog';
 import {getCurrentUser} from '../services/authService';
 
@@ -24,7 +23,7 @@ export default function AllowanceImportPage(){
     <div className="allowance-layout">
       <section className="panel import-panel"><h2 className="section-title"><Database/>นำเข้า Product Master</h2><FileDrop label="เลือกไฟล์ Allowance" onFile={handleFile}/>{rows.length>0&&<><div className="section-gap"><MatchSummaryCards items={[{label:'เพิ่มใหม่',value:summary.insert},{label:'อัปเดต',value:summary.update},{label:'เหมือนเดิม',value:summary.skip},{label:'รหัสซ้ำ',value:summary.duplicate,tone:'text-amber-600'},{label:'ไม่ครบ',value:summary.invalid,tone:'text-red-600'}]}/></div><div className="section-gap"><AllowanceImportPreview rows={rows}/></div><button className="btn-primary section-gap full-button" onClick={save}>ยืนยันการอัปเดต</button></>}</section>
       <section className="panel product-panel">
-        <div className="panel-heading"><h2 className="section-title">รายการสินค้า <span className="badge">{products.length}</span></h2><div className="desktop-actions"><button className="btn-quiet" onClick={async()=>{await loadDemoData();setMessage('เปิด Demo Data แล้ว')}}><TestTube2/>เปิด Demo</button><button className="btn-quiet" onClick={async()=>{await removeDemoData();setMessage('ปิด Demo Data แล้ว')}}><Trash2/>ปิด Demo</button>{isAdmin&&<button className="btn-danger-outline" disabled={!products.length||deleting} onClick={()=>setDeleteOpen(true)}><Trash2/>ลบข้อมูล Allowance</button>}</div></div>
+        <div className="panel-heading"><h2 className="section-title">รายการสินค้า <span className="badge">{products.length}</span></h2><div className="desktop-actions">{isAdmin&&<button className="btn-danger-outline" disabled={!products.length||deleting} onClick={()=>setDeleteOpen(true)}><Trash2/>ลบข้อมูล Allowance</button>}</div></div>
         <div className="product-filters"><label className="input-shell"><Search/><span className="sr-only">ค้นหาสินค้า</span><input value={query} onChange={event=>{setQuery(event.target.value);setPage(1)}} placeholder="ค้นหารหัสหรือชื่อสินค้า"/></label><label><span className="sr-only">หมวดสินค้า</span><select className="input" value={category} onChange={event=>{setCategory(event.target.value);setPage(1)}}><option value="">ทุกหมวดสินค้า</option>{[...new Set(products.map(product=>product.categoryName).filter(Boolean))].map(name=><option key={name}>{name}</option>)}</select></label></div>
         <ProductMasterTable products={filtered.slice((page-1)*10,page*10)}/>
         <div className="pagination"><span>หน้า {Math.min(page,pageCount)} / {pageCount}</span><div><button className="btn-quiet" disabled={page===1} onClick={()=>setPage(value=>value-1)}>ก่อนหน้า</button><button className="btn-quiet" disabled={page>=pageCount} onClick={()=>setPage(value=>value+1)}>ถัดไป</button></div></div>
