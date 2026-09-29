@@ -175,27 +175,19 @@ async function pullFirestoreToLocal() {
       .sort((a, b) => Number(a.fields?.chunkIndex?.integerValue || 0) - Number(b.fields?.chunkIndex?.integerValue || 0))
       .flatMap(document => deserialize(document.fields?.payload?.stringValue || '[]'));
 
-    // Never clear local data during refresh. Firebase can be behind this device
-    // (for example when the page is refreshed before a queued upload finishes).
-    // Merge missing remote rows and only replace a local row when the remote row
-    // has a newer updatedAt value. This keeps offline/local counts from vanishing.
+    // Cloud chunks are a complete table snapshot. Since dirty local tables were
+    // skipped above, replacing this clean table is safe and also propagates
+    // deletions to other devices. A merge-only pull cannot remove a remote delete.
     const table = db.table(tableName);
     const remoteRecords=(records as Array<Record<string,unknown>>).filter(record=>{
       const keyPath=table.schema.primKey.keyPath;
       const key=typeof keyPath==='string'?record[keyPath]:undefined;
       return typeof key==='string'||typeof key==='number';
     });
-    const keyPath=table.schema.primKey.keyPath as string;
-    const keys=remoteRecords.map(record=>record[keyPath] as string|number);
-    const locals=await table.bulkGet(keys) as Array<Record<string,unknown>|undefined>;
-    const toPut=remoteRecords.filter((record,index)=>{
-      const local=locals[index];
-      if(!local)return true;
-      const remoteUpdated=record.updatedAt?+new Date(record.updatedAt as string|Date):0;
-      const localUpdated=local.updatedAt?+new Date(local.updatedAt as string|Date):0;
-      return !!remoteUpdated&&remoteUpdated>localUpdated;
+    await db.transaction('rw',table,async()=>{
+      await table.clear();
+      if(remoteRecords.length)await table.bulkPut(remoteRecords);
     });
-    if(toPut.length)await table.bulkPut(toPut);
   }
 }
 
