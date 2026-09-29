@@ -3,7 +3,7 @@ import {useLiveQuery} from 'dexie-react-hooks';
 import {Trash2, UserPlus} from 'lucide-react';
 import {db} from '../db/database';
 import {getCurrentUser} from '../services/authService';
-import {queueFirestoreSync} from '../services/firebaseSync';
+import {deleteFirestoreRows,queueFirestoreSync} from '../services/firebaseSync';
 import {Empty, Page} from './AllowanceImportPage';
 import {PageSizeControl,usePageSize} from '../components/PageSizeControl';
 
@@ -66,7 +66,7 @@ export default function UserManagementPage() {
   const remove = async (id?: number) => {
     if (!id || !confirm('ลบ User นี้ใช่หรือไม่?')) return;
     await db.auditUsers.delete(id);
-    queueFirestoreSync(['auditUsers']);
+    await deleteFirestoreRows([{table:'auditUsers',key:id}]);
   };
 
   return <Page title="ผู้ใช้งาน" subtitle="กำหนด User, Password และสาขาที่อนุญาตให้เข้าใช้งาน">

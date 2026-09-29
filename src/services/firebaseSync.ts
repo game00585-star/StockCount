@@ -168,6 +168,9 @@ async function pullFirestoreToLocal() {
   }
 
   for (const [tableName, tableChunks] of byTable) {
+    // A pending local change is authoritative. Pulling the old cloud snapshot
+    // first would resurrect rows that were just deleted before a refresh.
+    if (dirtyTables.has(tableName)) continue;
     const records = tableChunks
       .sort((a, b) => Number(a.fields?.chunkIndex?.integerValue || 0) - Number(b.fields?.chunkIndex?.integerValue || 0))
       .flatMap(document => deserialize(document.fields?.payload?.stringValue || '[]'));
@@ -296,8 +299,16 @@ export async function refreshFromFirestore() {
 
 // เก็บชื่อ function เดิมไว้ให้ repository เรียกได้
 // โหมดประหยัดใช้การ upload chunk ทั้งตารางแทนการลบเอกสารรายตัว
-export async function deleteFirestoreRows(_rows: Array<{table: string; key: unknown}>) {
-  return;
+export async function deleteFirestoreRows(rows: Array<{table: string; key: unknown}>) {
+  const affected = new Set<TableName>();
+  rows.forEach(({table}) => {if (isTableName(table)) affected.add(table);});
+  affected.forEach(table => dirtyTables.add(table));
+  persistPendingTables();
+  if (!navigator.onLine || !affected.size) return;
+  if (activeSync) await activeSync;
+  affected.forEach(table => dirtyTables.add(table));
+  persistPendingTables();
+  await syncAllToFirestore();
 }
 
 export async function initializeCloudData() {

@@ -25,6 +25,7 @@ function Metric({label,value}:{label:string;value:number}){return <div><b classN
 export function ProductCountCard({item,categoryName,transactions,onClick}:{item:CountSessionItem;categoryName?:string;transactions:CountTransaction[];onClick:()=>void}){
   const latest = [...transactions].sort((a,b) => +new Date(b.countedAt) - +new Date(a.countedAt))[0];
   const total = transactions.reduce((s,t) => s + t.signedQuantity, 0);
+  return <button onClick={onClick} className="product-row text-left"><div className="min-w-0"><h3>{item.productNameSnapshot}</h3><p>หน่วย {item.unitSnapshot||'-'}</p></div><div className="product-row-status"><span className={latest?'status-counted':'status-new'}>{latest?'นับแล้ว':'ยังไม่นับ'}</span>{latest&&<b className={total<0?'text-red-600':'text-slate-900'}>{total.toLocaleString('th-TH',{maximumFractionDigits:3})}</b>}</div></button>;
   return <button onClick={onClick} className="product-row text-left"><div className="min-w-0"><h3>{item.productNameSnapshot}</h3><p>{categoryName || 'ไม่ระบุหมวด'} · รหัส {item.productCode} · หน่วย {item.unitSnapshot}</p>{latest ? <p>ล่าสุด {new Date(latest.countedAt).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})} น.</p> : <p>แตะเพื่อเริ่มนับ</p>}</div><div className="product-row-status"><span className={latest ? 'status-counted' : 'status-new'}>{latest ? 'นับแล้ว' : 'ยังไม่นับ'}</span>{latest && <b className={total < 0 ? 'text-red-600' : 'text-slate-900'}>{total.toLocaleString('th-TH',{maximumFractionDigits:3})}</b>}</div></button>;
 }
 

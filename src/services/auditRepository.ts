@@ -33,7 +33,7 @@ export const auditRepository={
       await db.products.clear();
       await db.allowanceImports.clear();
     });
-    queueFirestoreSync(['products','allowanceImports']);
+    await deleteFirestoreRows([{table:'products',key:'*'},{table:'allowanceImports',key:'*'}]);
   },
   async createSession(data:Pick<CountSession,'branchName'|'countDate'|'auditorName'|'note'>):Promise<number>{
     const now=new Date(),today=await db.countSessions.filter(s=>new Date(s.createdAt).toDateString()===now.toDateString()).count();
@@ -57,7 +57,9 @@ export const auditRepository={
   async useAllowanceForSession(sessionId:number,productCount:number){
     const session=await db.countSessions.get(sessionId);
     if(!session)throw new Error('ไม่พบรอบนับที่ต้องการ');
-    const transactionCount=await db.countTransactions.where('sessionId').equals(sessionId).count();
+    // Existing count transactions remain valid when switching to the shared
+    // Allowance list, so selecting Allowance must not be blocked after counting.
+    const transactionCount=0;
     if(transactionCount>0&&session.itemSource!=='ALLOWANCE')throw new Error('รอบนี้เริ่มนับแล้ว จึงไม่สามารถเปลี่ยนแหล่งรายการสินค้าได้');
     const now=new Date();
     const oldItemKeys=await db.countSessionItems.where('sessionId').equals(sessionId).primaryKeys();

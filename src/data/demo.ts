@@ -1,4 +1,4 @@
-import {db} from '../db/database';import {auditRepository} from '../services/auditRepository';
+import {db} from '../db/database';import {auditRepository} from '../services/auditRepository';import {deleteFirestoreRows} from '../services/firebaseSync';
 const products:[string,string,string][]=[['0001001','หมูบด สูตร 5 บรรจุ 1 กก.','กก.'],['0001002','ปอด','กก.'],['0001003','เลือดต้ม (ก้อน)','ก้อน'],['0001004','เนื้อแดง (ไหล่)','กก.'],['0001005','สะโพก','กก.'],['0001006','หมูสามชั้นบาง','กก.']];
 export async function loadDemoData(){
   if(await db.products.where('categoryCode').equals('__DEMO__').count())return;
@@ -12,4 +12,4 @@ export async function loadDemoData(){
     await auditRepository.addTransaction({sessionId:sid,productCode:code,productNameSnapshot:products.find(p=>p[0]===code)![1],action,quantity:qty,signedQuantity:signed,previousTotal:old,newTotal:old+signed,note:'ข้อมูลตัวอย่าง',countedAt:new Date(now.getTime()+offset++*60000),countedBy:'ผู้ตรวจนับตัวอย่าง'});
   }
 }
-export async function removeDemoData(){const demos=await db.products.where('categoryCode').equals('__DEMO__').primaryKeys();const sessions=await db.countSessions.filter(s=>s.note==='Demo Data').toArray();await db.transaction('rw',db.products,db.countSessions,db.countSessionItems,db.countTransactions,async()=>{await db.products.bulkDelete(demos);for(const s of sessions){await db.countTransactions.where('sessionId').equals(s.id!).delete();await db.countSessionItems.where('sessionId').equals(s.id!).delete();await db.countSessions.delete(s.id!);}});}
+export async function removeDemoData(){const demos=await db.products.where('categoryCode').equals('__DEMO__').primaryKeys();const sessions=await db.countSessions.filter(s=>s.note==='Demo Data').toArray();await db.transaction('rw',db.products,db.countSessions,db.countSessionItems,db.countTransactions,async()=>{await db.products.bulkDelete(demos);for(const s of sessions){await db.countTransactions.where('sessionId').equals(s.id!).delete();await db.countSessionItems.where('sessionId').equals(s.id!).delete();await db.countSessions.delete(s.id!);}});await deleteFirestoreRows([{table:'products',key:'demo'},{table:'countSessions',key:'demo'},{table:'countSessionItems',key:'demo'},{table:'countTransactions',key:'demo'}]);}
