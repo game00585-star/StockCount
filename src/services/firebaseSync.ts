@@ -36,7 +36,12 @@ type ChunkDocument = {
 
 // Firestore limits strings by UTF-8 bytes; Thai characters can use three bytes.
 const maxPayloadBytes = 700_000;
-const pendingStorageKey = 'audit-stock-pending-sync-v1';
+// v2 intentionally drops stale pending-table flags created by the old
+// merge-only synchronizer. Those flags could make a second device skip the
+// valid cloud snapshot forever even though Firebase already had the session.
+const legacyPendingStorageKey = 'audit-stock-pending-sync-v1';
+const pendingStorageKey = 'audit-stock-pending-sync-v2';
+localStorage.removeItem(legacyPendingStorageKey);
 let activeSync: Promise<void> | undefined;
 let queuedTimer: number | undefined;
 let onlineListenerInstalled = false;
