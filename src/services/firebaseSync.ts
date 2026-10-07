@@ -19,6 +19,7 @@ const tableNames = [
   'countSessions',
   'countSessionItems',
   'countTransactions',
+  'damagedCounts',
   'movementDrafts',
   'auditUsers'
 ] as const;
@@ -199,7 +200,7 @@ async function pullFirestoreToLocal() {
 async function pushTablesToFirestore(tables: Iterable<TableName>) {
   if (!navigator.onLine) throw new Error('Offline');
 
-  const priority:TableName[]=['countTransactions','countSessionItems','countSessions','products','allowanceImports','movementImports','movementItems','movementDrafts','auditUsers'];
+  const priority:TableName[]=['damagedCounts','countTransactions','countSessionItems','countSessions','products','allowanceImports','movementImports','movementItems','movementDrafts','auditUsers'];
   const requested=new Set(tables);
   const tableList = priority.filter(table=>requested.has(table));
   if (!tableList.length) return;

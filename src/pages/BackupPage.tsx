@@ -5,7 +5,7 @@ import {getCurrentUser} from '../services/authService';
 import {ConfirmDialog} from '../components/ConfirmDialog';
 import {Page} from './AllowanceImportPage';
 
-const labels:Record<string,string>={products:'สินค้า',allowanceImports:'ประวัตินำเข้า Allowance',movementImports:'ไฟล์รายการเคลื่อนไหว',movementItems:'รายการเคลื่อนไหว',countSessions:'รอบนับ',countSessionItems:'สินค้าในรอบนับ',countTransactions:'ประวัติการนับ',movementDrafts:'ฉบับร่างนำเข้า',auditUsers:'ผู้ใช้งาน',exportRecords:'ประวัติ Export'};
+const labels:Record<string,string>={products:'สินค้า',allowanceImports:'ประวัตินำเข้า Allowance',movementImports:'ไฟล์รายการเคลื่อนไหว',movementItems:'รายการเคลื่อนไหว',countSessions:'รอบนับ',countSessionItems:'สินค้าในรอบนับ',countTransactions:'ประวัติการนับ',damagedCounts:'การนับสินค้าเสื่อมสภาพและรูปภาพ',movementDrafts:'ฉบับร่างนำเข้า',auditUsers:'ผู้ใช้งาน',exportRecords:'ประวัติ Export'};
 
 export default function BackupPage(){
   const user=getCurrentUser(),isAdmin=user?.role==='ADMIN',inputRef=useRef<HTMLInputElement>(null);

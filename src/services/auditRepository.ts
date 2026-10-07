@@ -7,15 +7,17 @@ import {getCurrentUser,verifyHistoryDeleteCredentials} from './authService';
 async function deleteSessionData(sessionId:number){
   const itemKeys=await db.countSessionItems.where('sessionId').equals(sessionId).primaryKeys();
   const transactionKeys=await db.countTransactions.where('sessionId').equals(sessionId).primaryKeys();
+  const damagedKeys=await db.damagedCounts.where('sessionId').equals(sessionId).primaryKeys();
   const exportKeys=await db.exportRecords.where('sessionId').equals(sessionId).primaryKeys();
-  await db.transaction('rw',db.countSessions,db.countSessionItems,db.countTransactions,db.exportRecords,async()=>{await db.countSessionItems.where('sessionId').equals(sessionId).delete();await db.countTransactions.where('sessionId').equals(sessionId).delete();await db.exportRecords.where('sessionId').equals(sessionId).delete();await db.countSessions.delete(sessionId);});
+  await db.transaction('rw',[db.countSessions,db.countSessionItems,db.countTransactions,db.damagedCounts,db.exportRecords],async()=>{await db.countSessionItems.where('sessionId').equals(sessionId).delete();await db.countTransactions.where('sessionId').equals(sessionId).delete();await db.damagedCounts.where('sessionId').equals(sessionId).delete();await db.exportRecords.where('sessionId').equals(sessionId).delete();await db.countSessions.delete(sessionId);});
   await deleteFirestoreRows([
     {table:'countSessions',key:sessionId},
     ...itemKeys.map(key=>({table:'countSessionItems',key})),
     ...transactionKeys.map(key=>({table:'countTransactions',key})),
+    ...damagedKeys.map(key=>({table:'damagedCounts',key})),
     ...exportKeys.map(key=>({table:'exportRecords',key}))
   ]);
-  queueFirestoreSync(['countSessions','countSessionItems','countTransactions']);
+  queueFirestoreSync(['countSessions','countSessionItems','countTransactions','damagedCounts']);
 }
 
 export const auditRepository={
