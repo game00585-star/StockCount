@@ -29,6 +29,7 @@ function setCell(sheet:XLSX.WorkSheet,address:string,value:string|number,kind:'s
 }
 
 function fillPage(sheet:XLSX.WorkSheet,session:CountSession,rows:DamagedSummaryRow[],page:number,totalPages:number){
+  sheet['!ref']='A1:G43';
   setCell(sheet,'B5',session.branchName);
   setCell(sheet,'G5',`${session.sessionNumber}${totalPages>1?` หน้า ${page}/${totalPages}`:''}`);
   setCell(sheet,'G6',new Date().toLocaleDateString('th-TH'));
@@ -63,6 +64,10 @@ export function buildDamagedWorkbook(template:ArrayBuffer,session:CountSession,r
     fillPage(copy,session,rows.slice((page-1)*20,page*20),page,pages);
     workbook.SheetNames.push(name);workbook.Sheets[name]=copy;
   }
+  if(!workbook.Workbook)workbook.Workbook={};
+  const pageNames=Array.from({length:pages},(_,index)=>index===0?templateName:`Apendix ${index+1}`);
+  const keepNames=(workbook.Workbook.Names||[]).filter(item=>item.Name!=='_xlnm.Print_Area');
+  workbook.Workbook.Names=[...keepNames,...pageNames.map(name=>({Name:'_xlnm.Print_Area',Sheet:workbook.SheetNames.indexOf(name),Ref:`'${name.replace(/'/g,"''")}'!$A$1:$G$43`}))];
   return XLSX.write(workbook,{bookType:'xlsx',type:'array',cellStyles:true}) as ArrayBuffer;
 }
 
