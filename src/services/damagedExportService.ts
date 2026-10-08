@@ -1,7 +1,7 @@
 import * as XLSX from 'xlsx';
 import type {CountSession,DamagedCount} from '../types';
 
-export type DamagedSummaryRow={productCode:string;productName:string;unit:string;total:number};
+export type DamagedSummaryRow={productCode:string;productName:string;unit:string;category?:string;total:number};
 export function summarizeDamagedCounts(records:DamagedCount[]):DamagedSummaryRow[]{
   const summary=new Map<string,DamagedSummaryRow>();
   records.forEach(record=>{const existing=summary.get(record.productCode);if(existing)existing.total+=record.signedQuantity;else summary.set(record.productCode,{productCode:record.productCode,productName:record.productNameSnapshot,unit:record.unitSnapshot,total:record.signedQuantity})});
@@ -35,6 +35,7 @@ function insertBefore(xml:string,closingTag:string,content:string){const index=x
 function nextNumericId(xml:string,prefix:string){return Math.max(0,...[...xml.matchAll(new RegExp(`${prefix}(\\d+)`,'g'))].map(match=>Number(match[1])))+1}
 
 export async function loadDefaultDamagedTemplate(){const response=await fetch('/damaged-product-template.xlsx',{cache:'no-store'});if(!response.ok)throw new Error('ไม่พบไฟล์แม่แบบ Excel กรุณาอัปโหลดแม่แบบใหม่');return response.arrayBuffer()}
+export async function loadDefaultActionPlanTemplate(){const response=await fetch('/damage-action-plan-template.xlsx',{cache:'no-store'});if(!response.ok)throw new Error('ไม่พบไฟล์แม่แบบรายงาน Action plan');return response.arrayBuffer()}
 
 export function buildDamagedWorkbook(template:ArrayBuffer,session:CountSession,rows:DamagedSummaryRow[]){
   const zip=XLSX.CFB.read(new Uint8Array(template),{type:'buffer'}) as unknown as ZipPackage;
@@ -58,5 +59,32 @@ export function buildDamagedWorkbook(template:ArrayBuffer,session:CountSession,r
   const output=XLSX.CFB.write(zip as never,{type:'array',fileType:'zip'}) as Uint8Array;return output.buffer.slice(output.byteOffset,output.byteOffset+output.byteLength) as ArrayBuffer;
 }
 
+function xmlCell(address:string,style:number,value:string|number|undefined,kind:'s'|'n'='s'){
+  if(value===undefined||value==='')return `<c r="${address}" s="${style}"/>`;
+  return kind==='n'?`<c r="${address}" s="${style}"><v>${Number(value)}</v></c>`:`<c r="${address}" s="${style}" t="inlineStr"><is><t xml:space="preserve">${xmlEscape(String(value))}</t></is></c>`;
+}
+function actionPlanRow(row:number,cells:string[]){return `<row r="${row}" spans="1:6" ht="17.25" customHeight="1" x14ac:dyDescent="0.2">${cells.join('')}</row>`}
+function normalizedUnit(unit:string){const value=unit.trim();return /^(กก\.?|kg\.?|กิโล(?:กรัม)?)$/i.test(value)?'กก.':value||'ไม่ระบุหน่วย'}
+
+export function buildDamageActionPlanWorkbook(template:ArrayBuffer,rows:DamagedSummaryRow[]){
+  const zip=XLSX.CFB.read(new Uint8Array(template),{type:'buffer'}) as unknown as ZipPackage,sheetPath='xl/worksheets/sheet1.xml';
+  let xml=readText(zip,sheetPath),rowNumber=1;const sheetRows:string[]=[],merges:string[]=[];
+  const groups=new Map<string,DamagedSummaryRow[]>();rows.forEach(row=>{const unit=normalizedUnit(row.unit),list=groups.get(unit)||[];list.push(row);groups.set(unit,list)});
+  const ordered=[...groups.entries()].sort(([a],[b])=>a==='กก.'?-1:b==='กก.'?1:a.localeCompare(b,'th'));
+  ordered.forEach(([unit,group],groupIndex)=>{
+    if(groupIndex){sheetRows.push(actionPlanRow(rowNumber,[]));rowNumber++}
+    const headerRow=rowNumber;sheetRows.push(actionPlanRow(rowNumber,[xmlCell(`A${rowNumber}`,1,'รหัสสินค้า'),xmlCell(`B${rowNumber}`,1,'รายการสินค้า'),xmlCell(`C${rowNumber}`,1,'หน่วยนับ'),xmlCell(`D${rowNumber}`,1,'หมวด'),xmlCell(`E${rowNumber}`,2,'จำนวน')]));rowNumber++;
+    const dataStart=rowNumber;
+    group.forEach(item=>{sheetRows.push(actionPlanRow(rowNumber,[xmlCell(`A${rowNumber}`,4,item.productCode),xmlCell(`B${rowNumber}`,4,item.productName),xmlCell(`C${rowNumber}`,4,item.unit),xmlCell(`D${rowNumber}`,4,item.category||''),xmlCell(`E${rowNumber}`,5,Number(item.total.toFixed(3)),'n')]));rowNumber++});
+    const totalRow=rowNumber,total=group.reduce((sum,item)=>sum+item.total,0);merges.push(`A${totalRow}:D${totalRow}`);
+    sheetRows.push(actionPlanRow(totalRow,[xmlCell(`A${totalRow}`,8,'รวม'),xmlCell(`B${totalRow}`,9,undefined),xmlCell(`C${totalRow}`,9,undefined),xmlCell(`D${totalRow}`,10,undefined),xmlCell(`E${totalRow}`,unit==='กก.'?6:7,Number(total.toFixed(3)),'n'),xmlCell(`F${totalRow}`,3,unit)]));rowNumber++;
+    if(group.length===0||dataStart===headerRow+1)return;
+  });
+  const finalRow=Math.max(1,rowNumber-1),sheetData=`<sheetData>${sheetRows.join('')}</sheetData>`,mergeXml=merges.length?`<mergeCells count="${merges.length}">${merges.map(ref=>`<mergeCell ref="${ref}"/>`).join('')}</mergeCells>`:'';
+  xml=xml.replace(/<dimension ref="[^"]+"\/>/,`<dimension ref="A1:F${finalRow}"/>`).replace(/<sheetData>[\s\S]*?<\/sheetData>/,sheetData).replace(/<mergeCells[\s\S]*?<\/mergeCells>/,mergeXml);
+  writeText(zip,sheetPath,xml);const output=XLSX.CFB.write(zip as never,{type:'array',fileType:'zip'}) as Uint8Array;return output.buffer.slice(output.byteOffset,output.byteOffset+output.byteLength) as ArrayBuffer;
+}
+
 export function damagedReportFileName(session:CountSession){const stamp=new Date().toISOString().slice(0,16).replace('T','_').replace(':','');return `Damaged_Product_${session.branchName}_${stamp}.xlsx`}
+export function damageActionPlanFileName(session:CountSession){const stamp=new Date().toISOString().slice(0,16).replace('T','_').replace(':','');return `Damage_Action_Plan_${session.branchName}_${stamp}.xlsx`}
 export function downloadArrayBuffer(data:ArrayBuffer,fileName:string){const url=URL.createObjectURL(new Blob([data],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));const link=document.createElement('a');link.href=url;link.download=fileName;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000)}
