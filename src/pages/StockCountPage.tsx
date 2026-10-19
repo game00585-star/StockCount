@@ -11,7 +11,7 @@ import {downloadJsonBackup} from '../services/backupService';
 import {ConfirmDialog} from '../components/ConfirmDialog';
 import {Toast} from '../components/Toast';
 import {ExportHistory} from '../components/ExportHistory';
-import {CountHistoryDrawer,CountStepModal,ProductCountCard,RecentCountHistory,StockCountHeader} from '../components/CountUI';
+import {CountStepModal,ProductCountCard,RecentCountHistory,StockCountHeader} from '../components/CountUI';
 import {PageSizeControl,usePageSize} from '../components/PageSizeControl';
 import {Empty,Page} from './AllowanceImportPage';
 import {canAccessBranch, filterSessionsByUser, getCurrentUser} from '../services/authService';
@@ -63,7 +63,6 @@ export default function StockCountPage(){
   const [pageSize,setPageSize] = usePageSize();
   const [page,setPage] = useState(1);
   const [selected,setSelected] = useState<CountSessionItem>();
-  const [history,setHistory] = useState<CountSessionItem>();
   const [clear,setClear] = useState(false);
   const [finishConfirm,setFinishConfirm] = useState(false);
   const [finishing,setFinishing] = useState(false);
@@ -154,7 +153,7 @@ export default function StockCountPage(){
 
   useEffect(() => {
     const receiveScanner = (event:KeyboardEvent) => {
-      if (selected || history || event.ctrlKey || event.altKey || event.metaKey) return;
+      if (selected || event.ctrlKey || event.altKey || event.metaKey) return;
       const target = event.target as HTMLElement | null;
       if (target?.matches('input, textarea, select, [contenteditable="true"]')) return;
       const now = Date.now();
@@ -173,13 +172,12 @@ export default function StockCountPage(){
     };
     window.addEventListener('keydown', receiveScanner);
     return () => window.removeEventListener('keydown', receiveScanner);
-  }, [items, selected, history]);
+  }, [items, selected]);
 
   useEffect(() => {
     if (!scannerOpen || !videoRef.current) return;
     let disposed = false;
     const reader = new BrowserMultiFormatReader(undefined, {delayBetweenScanAttempts: 120});
-    setScannerError('');
     reader.decodeFromConstraints(
       {audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}},
       videoRef.current,
@@ -274,7 +272,7 @@ export default function StockCountPage(){
       <section className="panel">
         <div className="panel-heading stock-list-heading"><div><h2 className="section-title">รายการสินค้าในรอบนับ</h2><p>เพิ่มสินค้าที่มาภายหลังได้โดยไม่ต้องเริ่มรอบนับใหม่</p></div><button className="btn-primary" onClick={()=>setAddProductOpen(true)}><Plus/>เพิ่มสินค้า</button></div>
         <div className="stock-filters grid gap-3" onKeyDown={event=>{if(event.key==='Enter'&&event.target instanceof HTMLInputElement){event.preventDefault();openBarcode(query)}}}>
-          <label className="input-shell barcode-search-shell"><Search/><input value={query} onChange={e => {setQuery(e.target.value);setPage(1)}} placeholder="ค้นหาชื่อสินค้า / รหัสสินค้า / หมวดหมู่"/><button type="button" className="barcode-camera-button" aria-label="เปิดกล้องสแกนบาร์โค้ด" title="สแกนบาร์โค้ดด้วยกล้อง" onClick={event=>{event.preventDefault();setScannerOpen(true)}}><Camera/></button></label>
+          <label className="input-shell barcode-search-shell"><Search/><input value={query} onChange={e => {setQuery(e.target.value);setPage(1)}} placeholder="ค้นหาชื่อสินค้า / รหัสสินค้า / หมวดหมู่"/><button type="button" className="barcode-camera-button" aria-label="เปิดกล้องสแกนบาร์โค้ด" title="สแกนบาร์โค้ดด้วยกล้อง" onClick={event=>{event.preventDefault();setScannerError('');setScannerOpen(true)}}><Camera/></button></label>
           <select className="input" value={category} onChange={e => {setCategory(e.target.value);setPage(1)}}>
             <option value="all">ทุกหมวดหมู่</option>
             {categories.map(name => <option key={name} value={name}>{name}</option>)}
@@ -298,10 +296,7 @@ export default function StockCountPage(){
         <div className="stock-table mt-5">
           <div className="stock-table-head"><span>สินค้า / หมวดหมู่</span><span>สถานะ / ยอดนับ</span></div>
           <div className="grid gap-0">
-            {rows.slice((page-1)*pageSize,page*pageSize).map(row => <div key={row.item.productCode} className="relative">
-              <ProductCountCard item={row.item} categoryName={row.categoryName} transactions={row.tx} onClick={() => setSelected(row.item)}/>
-              {row.latest && <button aria-label="ดูประวัติ" className="absolute bottom-3 left-3 rounded-lg p-2 text-slate-400 hover:bg-slate-100" onClick={() => setHistory(row.item)}><History size={17}/></button>}
-            </div>)}
+            {rows.slice((page-1)*pageSize,page*pageSize).map(row => <ProductCountCard key={row.item.productCode} item={row.item} categoryName={row.categoryName} transactions={row.tx} onClick={() => setSelected(row.item)}/>)}
           </div>
         </div>
         {!rows.length && <Empty text="ไม่พบสินค้าตามเงื่อนไข"/>}
@@ -326,7 +321,6 @@ export default function StockCountPage(){
     </div>
 
     {selected && <CountStepModal item={selected} transactions={transactions.filter(t => normalizeCode(t.productCode) === normalizeCode(selected.productCode))} auditor={session.auditorName} onClose={() => setSelected(undefined)} onSave={save}/>}
-    {history && <CountHistoryDrawer item={history} transactions={transactions.filter(t => normalizeCode(t.productCode) === normalizeCode(history.productCode))} onClose={() => setHistory(undefined)}/>}
     {scannerOpen && <div className="modal-backdrop barcode-scanner-backdrop" role="dialog" aria-modal="true" aria-label="สแกนบาร์โค้ด"><div className="modal-card barcode-scanner-card"><div className="barcode-scanner-head"><div><h2>สแกนบาร์โค้ดสินค้า</h2><p>หันกล้องไปที่บาร์โค้ด ระบบจะค้นหาให้อัตโนมัติ</p></div><button type="button" className="barcode-scanner-close" aria-label="ปิดกล้อง" onClick={()=>setScannerOpen(false)}><X/></button></div><div className="barcode-video-wrap"><video ref={videoRef} autoPlay muted playsInline/><div className="barcode-scan-line"/></div>{scannerError&&<div className="backup-danger mt-4" role="alert">{scannerError}</div>}<button type="button" className="btn-secondary full-button mt-4" onClick={()=>setScannerOpen(false)}>ปิดกล้อง</button></div></div>}
     <AddSessionProductDialog open={addProductOpen} sessionId={session.id!} products={products} existingItems={items} onClose={()=>setAddProductOpen(false)} onAdded={item=>{setQuery(item.productCode);setCategory('all');setFilter('all');setPage(1);setToast(`เพิ่ม ${item.productNameSnapshot} เข้ารอบนับแล้ว`);window.setTimeout(()=>setToast(''),2500)}}/>
     <ConfirmDialog open={clear} title="ล้างข้อมูลรอบปัจจุบัน?" detail="รายการสินค้าและประวัติการนับในรอบนี้จะถูกลบ การกระทำนี้ย้อนกลับไม่ได้" onCancel={() => setClear(false)} onConfirm={async() => {await auditRepository.clearSession(session.id!);setClear(false);setToast('ล้างข้อมูลรอบปัจจุบันแล้ว')}}/>
