@@ -8,7 +8,7 @@ const base = `https://firestore.googleapis.com/v1/projects/${projectId}/database
 // ใช้ collection ใหม่แบบประหยัด: 1 ตารางถูกบีบเป็นเอกสารไม่กี่ก้อน
 // แทนแบบเดิมที่สินค้า 1,885 รายการ = 1,885 documents
 const chunkCollection = 'auditStockChunks';
-const comparisonCollection = 'auditCountComparisons';
+const comparisonDocumentId=(sessionId:number)=>`comparison__${sessionId}`;
 
 // ไม่ sync exportRecords เพราะมีไฟล์ Excel แบบ ArrayBuffer ใหญ่ กิน quota เร็วมาก
 // Export ยังใช้งานในเครื่องได้ตามปกติ และกด Export ใหม่จากฐานกลางได้
@@ -338,7 +338,7 @@ export async function initializeCloudData() {
 // The Excel file and repeated product metadata are never uploaded.
 export async function loadCountComparisonCloud(sessionId:number){
   try{
-    const document=await request(`${base}/${comparisonCollection}/${sessionId}`) as {fields?:{payload?:{stringValue?:string}}};
+    const document=await request(`${base}/${chunkCollection}/${comparisonDocumentId(sessionId)}`) as {fields?:{payload?:{stringValue?:string}}};
     return document.fields?.payload?.stringValue;
   }catch(error){
     if(error instanceof Error&&error.message.startsWith('Firebase 404:'))return undefined;
@@ -351,8 +351,8 @@ export function queueCountComparisonCloudSave(sessionId:number,payload:string,de
   comparisonTimers.set(sessionId,window.setTimeout(()=>{
     comparisonTimers.delete(sessionId);
     if(!navigator.onLine)return;
-    void request(`${base}/${comparisonCollection}/${sessionId}`,{
-      method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({fields:{sessionId:{integerValue:String(sessionId)},payload:{stringValue:payload},updatedAt:{timestampValue:new Date().toISOString()}}})
+    void request(`${base}/${chunkCollection}/${comparisonDocumentId(sessionId)}`,{
+      method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({fields:{table:{stringValue:'countComparison'},sessionId:{integerValue:String(sessionId)},payload:{stringValue:payload},updatedAt:{timestampValue:new Date().toISOString()}}})
     }).catch(error=>console.error('Firebase comparison sync failed; local copy remains available.',error));
   },delay));
 }
@@ -360,6 +360,6 @@ export function queueCountComparisonCloudSave(sessionId:number,payload:string,de
 export async function deleteCountComparisonCloud(sessionId:number){
   const current=comparisonTimers.get(sessionId);if(current)window.clearTimeout(current);
   comparisonTimers.delete(sessionId);
-  try{await request(`${base}/${comparisonCollection}/${sessionId}`,{method:'DELETE'})}
+  try{await request(`${base}/${chunkCollection}/${comparisonDocumentId(sessionId)}`,{method:'DELETE'})}
   catch(error){if(!(error instanceof Error&&error.message.startsWith('Firebase 404:')))throw error}
 }
