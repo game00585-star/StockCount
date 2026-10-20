@@ -8,6 +8,7 @@ const base = `https://firestore.googleapis.com/v1/projects/${projectId}/database
 // ใช้ collection ใหม่แบบประหยัด: 1 ตารางถูกบีบเป็นเอกสารไม่กี่ก้อน
 // แทนแบบเดิมที่สินค้า 1,885 รายการ = 1,885 documents
 const chunkCollection = 'auditStockChunks';
+const comparisonCollection = 'auditCountComparisons';
 
 // ไม่ sync exportRecords เพราะมีไฟล์ Excel แบบ ArrayBuffer ใหญ่ กิน quota เร็วมาก
 // Export ยังใช้งานในเครื่องได้ตามปกติ และกด Export ใหม่จากฐานกลางได้
@@ -47,6 +48,7 @@ let activeSync: Promise<void> | undefined;
 let queuedTimer: number | undefined;
 let onlineListenerInstalled = false;
 let blockedUntil = 0;
+const comparisonTimers=new Map<number,number>();
 const dirtyTables = new Set<TableName>(loadPendingTables());
 
 function isTableName(value: string): value is TableName {
@@ -330,4 +332,27 @@ export async function initializeCloudData() {
   } catch (error) {
     console.error('Firebase sync unavailable; continuing with local data.', error);
   }
+}
+
+// Cost-efficient comparison storage: one compact document per count session.
+// The Excel file and repeated product metadata are never uploaded.
+export async function loadCountComparisonCloud(sessionId:number){
+  try{
+    const document=await request(`${base}/${comparisonCollection}/${sessionId}`) as {fields?:{payload?:{stringValue?:string}}};
+    return document.fields?.payload?.stringValue;
+  }catch(error){
+    if(error instanceof Error&&error.message.startsWith('Firebase 404:'))return undefined;
+    throw error;
+  }
+}
+
+export function queueCountComparisonCloudSave(sessionId:number,payload:string,delay=2500){
+  const current=comparisonTimers.get(sessionId);if(current)window.clearTimeout(current);
+  comparisonTimers.set(sessionId,window.setTimeout(()=>{
+    comparisonTimers.delete(sessionId);
+    if(!navigator.onLine)return;
+    void request(`${base}/${comparisonCollection}/${sessionId}`,{
+      method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({fields:{sessionId:{integerValue:String(sessionId)},payload:{stringValue:payload},updatedAt:{timestampValue:new Date().toISOString()}}})
+    }).catch(error=>console.error('Firebase comparison sync failed; local copy remains available.',error));
+  },delay));
 }
