@@ -356,3 +356,10 @@ export function queueCountComparisonCloudSave(sessionId:number,payload:string,de
     }).catch(error=>console.error('Firebase comparison sync failed; local copy remains available.',error));
   },delay));
 }
+
+export async function deleteCountComparisonCloud(sessionId:number){
+  const current=comparisonTimers.get(sessionId);if(current)window.clearTimeout(current);
+  comparisonTimers.delete(sessionId);
+  try{await request(`${base}/${comparisonCollection}/${sessionId}`,{method:'DELETE'})}
+  catch(error){if(!(error instanceof Error&&error.message.startsWith('Firebase 404:')))throw error}
+}

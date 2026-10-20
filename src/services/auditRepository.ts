@@ -37,6 +37,11 @@ export const auditRepository={
     });
     await deleteFirestoreRows([{table:'products',key:'*'},{table:'allowanceImports',key:'*'}]);
   },
+  async deleteAllowanceImport(importId:number){
+    if(getCurrentUser()?.role!=='ADMIN')throw new Error('เฉพาะผู้ดูแลระบบ (Admin) เท่านั้นที่ลบประวัติ Import ได้');
+    await db.allowanceImports.delete(importId);
+    await deleteFirestoreRows([{table:'allowanceImports',key:importId}]);
+  },
   async createSession(data:Pick<CountSession,'branchName'|'countDate'|'auditorName'|'note'>):Promise<number>{
     const now=new Date(),today=await db.countSessions.filter(s=>new Date(s.createdAt).toDateString()===now.toDateString()).count();
     const id=Number(await db.countSessions.add({...data,sessionNumber:createSessionNumber(now,today+1),status:'ACTIVE',createdBy:data.auditorName,createdAt:now,updatedAt:now}));
