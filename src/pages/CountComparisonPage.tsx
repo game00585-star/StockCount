@@ -1,0 +1,28 @@
+import {useMemo,useRef,useState} from 'react';
+import {useLiveQuery} from 'dexie-react-hooks';
+import {Download,FileSpreadsheet,ShieldCheck,Upload} from 'lucide-react';
+import {db} from '../db/database';
+import {canAccessBranch,filterSessionsByUser,getCurrentUser} from '../services/authService';
+import {resolveSessionItems} from '../services/sessionItems';
+import {compareCounts,downloadCountComparison,parseManagerCountWorkbook,type CountComparisonRow} from '../services/countComparisonService';
+import {StockCountHeader} from '../components/CountUI';
+import {Empty,Page} from './AllowanceImportPage';
+import {Toast} from '../components/Toast';
+
+export default function CountComparisonPage(){
+  const user=getCurrentUser(),selectedSessionId=Number(localStorage.getItem('audit-selected-session'))||undefined;
+  const session=useLiveQuery(async()=>{if(selectedSessionId){const selected=await db.countSessions.get(selectedSessionId);if(selected?.status==='ACTIVE'&&canAccessBranch(user,selected.branchName))return selected}const active=await db.countSessions.where('status').equals('ACTIVE').toArray();return filterSessionsByUser(active,user).at(-1)},[selectedSessionId,user?.username]);
+  const storedItems=useLiveQuery(()=>session?.id?db.countSessionItems.where('sessionId').equals(session.id).toArray():[],[session?.id])||[],products=useLiveQuery(()=>db.products.toArray(),[])||[],transactions=useLiveQuery(()=>session?.id?db.countTransactions.where('sessionId').equals(session.id).toArray():[],[session?.id])||[];
+  const items=useMemo(()=>resolveSessionItems(session,storedItems,products),[session,storedItems,products]);
+  const [fileName,setFileName]=useState(''),[rows,setRows]=useState<CountComparisonRow[]>([]),[toast,setToast]=useState(''),[processing,setProcessing]=useState(false);
+  const inputRef=useRef<HTMLInputElement>(null);
+  const summary=useMemo(()=>({match:rows.filter(row=>row.status==='MATCH').length,different:rows.filter(row=>row.status==='DIFFERENT').length,auditOnly:rows.filter(row=>row.status==='AUDIT_ONLY').length,managerOnly:rows.filter(row=>row.status==='MANAGER_ONLY').length}),[rows]);
+  const importFile=async(file?:File)=>{if(!file)return;try{setProcessing(true);const parsed=parseManagerCountWorkbook(await file.arrayBuffer());setRows(compareCounts(items,transactions,parsed.rows));setFileName(file.name);setToast(`อ่านไฟล์ผู้จัดการสาขาแล้ว ${parsed.rows.length.toLocaleString('th-TH')} รายการ`)}catch(error){setToast(error instanceof Error?error.message:'อ่านไฟล์ไม่สำเร็จ')}finally{setProcessing(false);if(inputRef.current)inputRef.current.value='';window.setTimeout(()=>setToast(''),3500)}};
+  if(!session)return <Page title="เทียบยอดนับ" subtitle="เปรียบเทียบยอด Audit กับไฟล์ผู้จัดการสาขา"><section className="panel"><Empty text="ยังไม่มีรอบนับที่กำลังใช้งาน กรุณาสร้างหรือเลือกรอบนับก่อน"/></section></Page>;
+  return <Page title="เทียบยอดนับ" subtitle="จับคู่ด้วยรหัสสินค้า และคำนวณผลต่าง Audit - ผู้จัดการสาขา">
+    <StockCountHeader session={session} total={items.length} counted={new Set(transactions.map(row=>row.productCode)).size}/>
+    <section className="panel mt-5 comparison-upload-panel"><div><h2 className="section-title"><FileSpreadsheet/>ไฟล์นับของผู้จัดการสาขา</h2><p>ไฟล์จะถูกอ่านเฉพาะในอุปกรณ์นี้ ไม่บันทึกและไม่ส่งข้อมูลขึ้น Firebase</p>{fileName&&<small>ไฟล์ที่อ่านล่าสุด: {fileName}</small>}</div><div><input ref={inputRef} className="sr-only" type="file" accept=".xlsx,.xls" onChange={event=>void importFile(event.target.files?.[0])}/><button className="btn-primary" disabled={processing} onClick={()=>inputRef.current?.click()}><Upload/>{processing?'กำลังอ่านไฟล์...':fileName?'เปลี่ยนไฟล์ผู้จัดการ':'เลือกไฟล์ผู้จัดการ'}</button></div></section>
+    {!rows.length?<section className="panel mt-5 comparison-empty"><ShieldCheck/><h2>ยังไม่มีผลเปรียบเทียบ</h2><p>เลือกไฟล์ Excel ของผู้จัดการสาขา ระบบจะอ่านคอลัมน์รหัสสินค้าและนับรวม แล้วเทียบกับยอด Audit ปัจจุบัน</p></section>:<section className="panel mt-5"><div className="comparison-heading"><div><p className="eyebrow">AUDIT VS BRANCH MANAGER</p><h2>ผลเปรียบเทียบยอดนับ</h2><small>{fileName}</small></div><button className="btn-primary" onClick={()=>downloadCountComparison(session,rows)}><Download/>ดาวน์โหลดผลเปรียบเทียบ</button></div><div className="comparison-summary"><div className="match"><span>ตรงกัน</span><b>{summary.match}</b></div><div className="different"><span>ไม่ตรงกัน</span><b>{summary.different}</b></div><div><span>มีเฉพาะ Audit</span><b>{summary.auditOnly}</b></div><div><span>มีเฉพาะผู้จัดการ</span><b>{summary.managerOnly}</b></div></div><p className="comparison-formula">ผลต่าง = ยอด Audit − ยอดผู้จัดการสาขา</p><div className="table-scroll comparison-table"><table><thead><tr><th>รหัสสินค้า</th><th>ชื่อสินค้า</th><th>หมวดหมู่</th><th>หน่วย</th><th>Audit</th><th>ผู้จัดการ</th><th>ผลต่าง</th><th>สถานะ</th></tr></thead><tbody>{rows.map(row=><tr key={row.productCode} className={`comparison-${row.status.toLowerCase()}`}><td><code>{row.productCode}</code></td><td>{row.productName}</td><td>{row.category||'-'}</td><td>{row.unit||'-'}</td><td>{row.auditTotal.toLocaleString('th-TH',{maximumFractionDigits:3})}</td><td>{row.managerTotal.toLocaleString('th-TH',{maximumFractionDigits:3})}</td><td className={row.difference===0?'':'comparison-difference'}>{row.difference>0?'+':''}{row.difference.toLocaleString('th-TH',{maximumFractionDigits:3})}</td><td>{row.status==='MATCH'?'ตรงกัน':row.status==='DIFFERENT'?'ไม่ตรงกัน':row.status==='AUDIT_ONLY'?'เฉพาะ Audit':'เฉพาะผู้จัดการ'}</td></tr>)}</tbody></table></div></section>}
+    <Toast message={toast}/>
+  </Page>;
+}

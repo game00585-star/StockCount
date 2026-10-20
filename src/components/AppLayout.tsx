@@ -1,8 +1,8 @@
 import {useEffect,useState} from 'react';
-import {ClipboardList,DatabaseBackup,FileClock,FileSpreadsheet,LogOut,Menu,PackageCheck,PackageX,ShieldCheck,Users,X} from 'lucide-react';
+import {ClipboardList,DatabaseBackup,FileClock,FileSpreadsheet,GitCompareArrows,LogOut,Menu,PackageCheck,PackageX,ShieldCheck,Users,X} from 'lucide-react';
 import {NavLink,Outlet,useNavigate} from 'react-router-dom';
 import {branchListText,getCurrentUser,logout} from '../services/authService';
-const baseLinks=[['/allowance','ไฟล์ Allowance',FileSpreadsheet],['/movement','ไฟล์รายการเคลื่อนไหว',ClipboardList],['/count','นับสต็อก',PackageCheck],['/damaged-count','นับสินค้าเสื่อมสภาพ',PackageX],['/count-history','ประวัติการนับสินค้า',FileClock]] as const;
+const baseLinks=[['/allowance','ไฟล์ Allowance',FileSpreadsheet],['/movement','ไฟล์รายการเคลื่อนไหว',ClipboardList],['/count','นับสต็อก',PackageCheck],['/count-comparison','เทียบยอดนับ',GitCompareArrows],['/damaged-count','นับสินค้าเสื่อมสภาพ',PackageX],['/count-history','ประวัติการนับสินค้า',FileClock]] as const;
 function usePrimaryLinks(){const user=getCurrentUser();return user?.role==='ADMIN'?[...baseLinks,['/users','ผู้ใช้งาน',Users] as const]:baseLinks}
 function useAllLinks(){return[...usePrimaryLinks(),['/backup','สำรองและกู้คืน',DatabaseBackup] as const]}
 function UserSummary({onLogout}:{onLogout:()=>void}){const user=getCurrentUser();return <div className="user-summary"><b>{user?.displayName||user?.username}</b><span>สิทธิ์: {user?.role}</span><span>สาขา: {branchListText(user)}</span><button onClick={onLogout}><LogOut size={17}/>ออกจากระบบ</button></div>}
