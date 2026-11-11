@@ -1,11 +1,11 @@
 import * as XLSX from 'xlsx';
 import type {CountSession,DamagedCount} from '../types';
 
-export type DamagedSummaryRow={productCode:string;productName:string;unit:string;category?:string;total:number};
+export type DamagedSummaryRow={productCode:string;productName:string;unit:string;category?:string;total:number;unitPrice:number};
 export type DamagedAuditRow={productCode:string;productName:string;unit:string;category:string;quantity:number;photoDataUrl:string};
 export function summarizeDamagedCounts(records:DamagedCount[]):DamagedSummaryRow[]{
   const summary=new Map<string,DamagedSummaryRow>();
-  records.forEach(record=>{const existing=summary.get(record.productCode);if(existing)existing.total+=record.signedQuantity;else summary.set(record.productCode,{productCode:record.productCode,productName:record.productNameSnapshot,unit:record.unitSnapshot,total:record.signedQuantity})});
+  records.forEach(record=>{const existing=summary.get(record.productCode);if(existing){existing.total+=record.signedQuantity;if(record.unitPrice!==undefined)existing.unitPrice=record.unitPrice}else summary.set(record.productCode,{productCode:record.productCode,productName:record.productNameSnapshot,unit:record.unitSnapshot,total:record.signedQuantity,unitPrice:record.unitPrice||0})});
   return [...summary.values()].filter(row=>Math.abs(row.total)>0.000001).sort((a,b)=>a.productName.localeCompare(b.productName,'th'));
 }
 
@@ -27,10 +27,13 @@ function setCell(xml:string,address:string,value:string|number|undefined,kind:'s
   const body=kind==='n'?`<v>${Number(value)}</v>`:`<is><t xml:space="preserve">${xmlEscape(String(value))}</t></is>`;
   return xml.replace(pattern,`<c${attributes}>${body}</c>`);
 }
+function setFormula(xml:string,address:string,formula:string|undefined,cachedValue?:number){
+  const pattern=new RegExp(`<c([^>]*?r="${address}"[^>]*?)(?:\\s*/>|>[\\s\\S]*?<\\/c>)`),match=xml.match(pattern);if(!match)throw new Error(`แม่แบบไม่ตรงรูปแบบ: ไม่พบช่อง ${address}`);const attributes=match[1].replace(/\s+t="[^"]*"/g,'').replace(/\/\s*$/,'');if(!formula)return xml.replace(pattern,`<c${attributes}/>`);return xml.replace(pattern,`<c${attributes}><f>${xmlEscape(formula)}</f><v>${Number(cachedValue||0)}</v></c>`)
+}
 function fillPageXml(source:string,session:CountSession,rows:DamagedSummaryRow[],page:number,totalPages:number){
-  let xml=setCell(source,'B5',session.branchName);xml=setCell(xml,'G5',`${session.sessionNumber}${totalPages>1?` หน้า ${page}/${totalPages}`:''}`);xml=setCell(xml,'G6',new Date().toLocaleDateString('th-TH'));
-  for(let offset=0;offset<20;offset++){const excelRow=10+offset,row=rows[offset];xml=setCell(xml,`A${excelRow}`,offset+1,'n');xml=setCell(xml,`B${excelRow}`,row?.productCode);xml=setCell(xml,`C${excelRow}`,row?.productName);xml=setCell(xml,`D${excelRow}`,row?Number(row.total.toFixed(3)):undefined,row?'n':'s');for(const column of ['E','F','G'])xml=setCell(xml,`${column}${excelRow}`,undefined)}
-  return setCell(xml,'D30',Number(rows.reduce((sum,row)=>sum+row.total,0).toFixed(3)),'n');
+  void page;void totalPages;let xml=setCell(source,'B5',session.branchName);xml=setCell(xml,'G5',undefined);xml=setCell(xml,'G6',new Date(session.countDate).toLocaleDateString('th-TH'));
+  for(let offset=0;offset<20;offset++){const excelRow=10+offset,row=rows[offset];xml=setCell(xml,`A${excelRow}`,offset+1,'n');xml=setCell(xml,`B${excelRow}`,row?.productCode);xml=setCell(xml,`C${excelRow}`,row?.productName);xml=setCell(xml,`D${excelRow}`,row?Number(row.total.toFixed(3)):undefined,row?'n':'s');xml=setCell(xml,`E${excelRow}`,row?Number(row.unitPrice.toFixed(2)):undefined,row?'n':'s');xml=setFormula(xml,`F${excelRow}`,row?`E${excelRow}*D${excelRow}`:undefined,row?Number((row.unitPrice*row.total).toFixed(2)):undefined);xml=setCell(xml,`G${excelRow}`,undefined)}
+  xml=setCell(xml,'D30',Number(rows.reduce((sum,row)=>sum+row.total,0).toFixed(3)),'n');xml=setCell(xml,'E30',undefined);return setFormula(xml,'F30','SUM(F10:F29)',Number(rows.reduce((sum,row)=>sum+row.unitPrice*row.total,0).toFixed(2)));
 }
 function insertBefore(xml:string,closingTag:string,content:string){const index=xml.lastIndexOf(closingTag);if(index<0)throw new Error('โครงสร้างไฟล์แม่แบบไม่ถูกต้อง');return `${xml.slice(0,index)}${content}${xml.slice(index)}`}
 function nextNumericId(xml:string,prefix:string){return Math.max(0,...[...xml.matchAll(new RegExp(`${prefix}(\\d+)`,'g'))].map(match=>Number(match[1])))+1}
@@ -100,8 +103,8 @@ function normalizedUnit(unit:string){const value=unit.trim();return /^(กก\.?
 export function buildDamageGroupedActionPlanWorkbook(template:ArrayBuffer,rows:DamagedSummaryRow[]){
   const zip=XLSX.CFB.read(new Uint8Array(template),{type:'buffer'}) as unknown as ZipPackage,sheetPath='xl/worksheets/sheet1.xml';
   let xml=readText(zip,sheetPath),rowNumber=1;const sheetRows:string[]=[],merges:string[]=[];
-  const groups=new Map<string,DamagedSummaryRow[]>();rows.forEach(row=>{const unit=normalizedUnit(row.unit),list=groups.get(unit)||[];list.push(row);groups.set(unit,list)});
-  const ordered=[...groups.entries()].sort(([a],[b])=>a==='กก.'?-1:b==='กก.'?1:a.localeCompare(b,'th'));
+  const kgRows=rows.filter(row=>normalizedUnit(row.unit)==='กก.'),otherRows=rows.filter(row=>normalizedUnit(row.unit)!=='กก.'),ordered:[string,DamagedSummaryRow[]][]=[];
+  if(kgRows.length)ordered.push(['กก.',kgRows]);if(otherRows.length)ordered.push(['หน่วยอื่น',otherRows]);
   ordered.forEach(([unit,group],groupIndex)=>{
     if(groupIndex){sheetRows.push(actionPlanRow(rowNumber,[]));rowNumber++}
     sheetRows.push(actionPlanRow(rowNumber,[xmlCell(`A${rowNumber}`,1,'รหัสสินค้า'),xmlCell(`B${rowNumber}`,1,'รายการสินค้า'),xmlCell(`C${rowNumber}`,1,'หน่วยนับ'),xmlCell(`D${rowNumber}`,1,'หมวด'),xmlCell(`E${rowNumber}`,2,'จำนวน')]));rowNumber++;
