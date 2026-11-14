@@ -1,6 +1,6 @@
 import {db} from '../db/database';
-import type {CountSession,CountTransaction,ParsedMovement,ParsedProduct} from '../types';
-import {createSessionNumber} from '../utils/stock';
+import type {CountSession,CountTransaction,ParsedMovement,ParsedProduct,ProductMasterRow} from '../types';
+import {createSessionNumber,enrichAllowanceWithProductMaster} from '../utils/stock';
 import {deleteFirestoreRows, queueFirestoreSync} from './firebaseSync';
 import {getCurrentUser,verifyHistoryDeleteCredentials} from './authService';
 
@@ -21,6 +21,12 @@ async function deleteSessionData(sessionId:number){
 }
 
 export const auditRepository={
+  async applyProductMaster(masterRows:ProductMasterRow[]){
+    const products=await db.products.toArray(),now=new Date(),source:ParsedProduct[]=products.map((product,index)=>({row:index+2,productCode:product.productCode,productName:product.productName,unit:product.unit,categoryCode:product.categoryCode,categoryName:product.categoryName,barcode:product.barcode,unitPrice:product.unitPrice})),matched=enrichAllowanceWithProductMaster(source,masterRows).filter(row=>row.masterMatched),oldByCode=new Map(products.map(product=>[product.productCode,product]));
+    if(matched.length)await db.products.bulkPut(matched.map(row=>({...oldByCode.get(row.productCode)!,barcode:row.barcode,unitPrice:row.unitPrice,updatedAt:now})));
+    if(matched.length)queueFirestoreSync(['products']);
+    return matched.length;
+  },
   async saveAllowance(fileName:string,rows:ParsedProduct[],by='ผู้ใช้งาน'){
     const now=new Date(),valid=rows.filter(r=>r.status==='insert'||r.status==='update');
     await db.transaction('rw',db.products,db.allowanceImports,async()=>{
