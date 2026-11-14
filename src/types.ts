@@ -1,4 +1,4 @@
-export type Product={productCode:string;productName:string;unit:string;categoryCode:string;categoryName:string;isActive:boolean;createdAt:Date;updatedAt:Date};
+export type Product={productCode:string;productName:string;unit:string;categoryCode:string;categoryName:string;barcode?:string;unitPrice?:number;isActive:boolean;createdAt:Date;updatedAt:Date};
 export type AllowanceImport={id?:number;fileName:string;totalRows:number;insertedCount:number;updatedCount:number;skippedCount:number;duplicateCount:number;invalidCount:number;importedAt:Date;importedBy:string};
 export type MovementImport={id?:number;fileName:string;branchName:string;dateFrom?:Date;dateTo?:Date;totalRows:number;matchedCount:number;unmatchedCount:number;duplicateCount:number;invalidCount:number;importedAt:Date;importedBy:string};
 export type MovementItem={id?:number;movementImportId:number;productCode:string;sourceProductName:string;sourceUnit:string;sourceBalance?:number;matched:boolean;matchReason:string;createdAt:Date};
@@ -6,7 +6,8 @@ export type CountSession={id?:number;sessionNumber:string;branchName:string;coun
 export type CountSessionItem={id?:number;sessionId:number;productCode:string;productNameSnapshot:string;unitSnapshot:string;categoryCodeSnapshot?:string;categoryNameSnapshot?:string;sourceBalance?:number;addedAt:Date};
 export type CountTransaction={id?:number;sessionId:number;productCode:string;productNameSnapshot:string;action:'ADD'|'SUBTRACT';quantity:number;signedQuantity:number;previousTotal:number;newTotal:number;note:string;countedAt:Date;countedBy:string;createdAt:Date};
 export type DamagedCount={id?:number;sessionId:number;productCode:string;productNameSnapshot:string;unitSnapshot:string;action:'ADD'|'SUBTRACT';quantity:number;signedQuantity:number;previousTotal:number;newTotal:number;unitPrice?:number;photoDataUrl:string;photographedAt:Date;latitude?:number;longitude?:number;locationAccuracy?:number;locationText?:string;mapUrl?:string;countedAt:Date;countedBy:string;createdAt:Date};
-export type ParsedProduct=Pick<Product,'productCode'|'productName'|'unit'|'categoryCode'|'categoryName'> & {row:number;status?:'insert'|'update'|'skip'|'duplicate'|'invalid';error?:string};
+export type ParsedProduct=Pick<Product,'productCode'|'productName'|'unit'|'categoryCode'|'categoryName'|'barcode'|'unitPrice'> & {row:number;masterMatched?:boolean;status?:'insert'|'update'|'skip'|'duplicate'|'invalid';error?:string};
+export type ProductMasterRow={barcode:string;productName:string;unitPrice:number;unit:string;priceType:string};
 export type ParsedMovement={row:number;productCode:string;sourceProductName:string;sourceUnit:string;sourceBalance?:number;matched?:boolean;matchReason?:string;product?:Product;selected?:boolean;status?:'valid'|'duplicate'|'invalid'};
 export type ExportRecord={id?:number;fileName:string;exportType:'COUNT_SESSION'|'UNMATCHED';sessionId?:number;branchName?:string;createdAt:Date;data:ArrayBuffer};
 export type AuditUser={id?:number;username:string;password:string;displayName:string;role:'ADMIN'|'USER';allowedBranches:string[];isActive:boolean;createdAt:Date;updatedAt:Date};

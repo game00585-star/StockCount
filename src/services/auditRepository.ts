@@ -24,7 +24,7 @@ export const auditRepository={
   async saveAllowance(fileName:string,rows:ParsedProduct[],by='ผู้ใช้งาน'){
     const now=new Date(),valid=rows.filter(r=>r.status==='insert'||r.status==='update');
     await db.transaction('rw',db.products,db.allowanceImports,async()=>{
-      await db.products.bulkPut(valid.map(r=>({productCode:r.productCode,productName:r.productName,unit:r.unit,categoryCode:r.categoryCode,categoryName:r.categoryName,isActive:true,createdAt:now,updatedAt:now})));
+      await db.products.bulkPut(valid.map(r=>({productCode:r.productCode,productName:r.productName,unit:r.unit,categoryCode:r.categoryCode,categoryName:r.categoryName,barcode:r.barcode,unitPrice:r.unitPrice,isActive:true,createdAt:now,updatedAt:now})));
       await db.allowanceImports.add({fileName,totalRows:rows.length,insertedCount:rows.filter(r=>r.status==='insert').length,updatedCount:rows.filter(r=>r.status==='update').length,skippedCount:rows.filter(r=>r.status==='skip').length,duplicateCount:rows.filter(r=>r.status==='duplicate').length,invalidCount:rows.filter(r=>r.status==='invalid').length,importedAt:now,importedBy:by});
     });
     queueFirestoreSync(['products','allowanceImports']);

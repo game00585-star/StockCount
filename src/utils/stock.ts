@@ -5,7 +5,8 @@ import type {
   CountTransaction,
   ParsedMovement,
   ParsedProduct,
-  Product
+  Product,
+  ProductMasterRow
 } from '../types';
 
 export function normalizeProductCode(value: unknown): string {
@@ -32,6 +33,13 @@ export function normalizeProductCode(value: unknown): string {
 
 const tidy = (value: unknown) => String(value ?? '').trim();
 const headerKey = (value: unknown) => tidy(value).replace(/\s/g, '').toLowerCase();
+const matchName = (value: unknown) => tidy(value).normalize('NFKC').toLowerCase().replace(/[()（）[\]{}]/g,' ').replace(/[.,/\\\-_]/g,' ').replace(/\s+/g,' ').trim();
+
+function parseCsv(text:string){const rows:string[][]=[];let row:string[]=[],cell='',quoted=false;for(let index=0;index<text.length;index++){const character=text[index];if(character==='"'){if(quoted&&text[index+1]==='"'){cell+='"';index++}else quoted=!quoted}else if(character===','&&!quoted){row.push(cell);cell=''}else if((character==='\n'||character==='\r')&&!quoted){if(character==='\r'&&text[index+1]==='\n')index++;row.push(cell);if(row.some(value=>value.trim()))rows.push(row);row=[];cell=''}else cell+=character}row.push(cell);if(row.some(value=>value.trim()))rows.push(row);return rows}
+
+export function parseProductMasterCsv(data:ArrayBuffer):ProductMasterRow[]{let text='';try{text=new TextDecoder('utf-8',{fatal:true}).decode(data)}catch{text=new TextDecoder('windows-874').decode(data)}text=text.replace(/^\uFEFF/,'');const rows=parseCsv(text),headers=rows[0]||[],barcodeIndex=locate(headers,['รหัสสินค้า/บาร์โค้ด','บาร์โค้ด','barcode'],0),nameIndex=locate(headers,['ชื่อสินค้า','productname'],1),unitIndex=locate(headers,['หน่วย','unit'],3),priceIndex=locate(headers,['ราคา(บาท)','ราคา','price'],4),typeIndex=locate(headers,['ประเภทราคา','pricetype'],7);return rows.slice(1).map(row=>({barcode:normalizeProductCode(row[barcodeIndex]),productName:tidy(row[nameIndex]),unitPrice:Number(String(row[priceIndex]??'').replace(/,/g,'')),unit:tidy(row[unitIndex]),priceType:tidy(row[typeIndex])})).filter(row=>row.barcode&&row.productName&&Number.isFinite(row.unitPrice))}
+
+export function enrichAllowanceWithProductMaster(rows:ParsedProduct[],masterRows:ProductMasterRow[]){const masterByName=new Map<string,ProductMasterRow>();[...masterRows].sort((a,b)=>Number(!/ปกติ|normal/i.test(a.priceType))-Number(!/ปกติ|normal/i.test(b.priceType))).forEach(row=>{const key=matchName(row.productName);if(key&&!masterByName.has(key))masterByName.set(key,row)});return rows.map(row=>{const matched=masterByName.get(matchName(row.productName));return matched?{...row,barcode:matched.barcode,unitPrice:matched.unitPrice,masterMatched:true}:{...row,masterMatched:false}})}
 
 function locate(headers: unknown[], names: string[], fallback: number) {
   const index = headers.findIndex(header => names.some(name => headerKey(header).includes(name)));
@@ -128,7 +136,7 @@ export function compareAllowance(rows: ParsedProduct[], existing: Product[]) {
     const old = map.get(row.productCode);
     if (!old) return {...row, status: 'insert' as const};
 
-    const same = ['productName', 'unit', 'categoryCode', 'categoryName'].every(
+    const same = ['productName', 'unit', 'categoryCode', 'categoryName', 'barcode', 'unitPrice'].every(
       key => old[key as keyof Product] === row[key as keyof ParsedProduct]
     );
     return {...row, status: same ? 'skip' as const : 'update' as const};

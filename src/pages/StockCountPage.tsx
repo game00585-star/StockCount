@@ -82,6 +82,11 @@ export default function StockCountPage(){
     });
     return map;
   }, [products]);
+  const productCodeByBarcode = useMemo(() => {
+    const map = new Map<string,string>();
+    products.forEach(product => {if(product.barcode)map.set(normalizeCode(product.barcode),normalizeCode(product.productCode))});
+    return map;
+  }, [products]);
   const categories = useMemo(() => {
     const set = new Set<string>();
     items.forEach(item => {
@@ -109,11 +114,11 @@ export default function StockCountPage(){
     const tx = transactionsByCode.get(itemCode) || [];
     const total = tx.reduce((sum,t) => sum + t.signedQuantity, 0);
     const latest = [...tx].sort((a,b) => +new Date(b.countedAt) - +new Date(a.countedAt))[0];
-    return {item, itemCode, categoryName, categoryKey, tx, total, latest};
+    return {item, product, itemCode, categoryName, categoryKey, tx, total, latest};
   }).filter(row => {
     const keyword = normalizeText(query);
     if (!keyword) return true;
-    return [row.itemCode, row.item.productNameSnapshot, row.categoryName]
+    return [row.product?.barcode, row.itemCode, row.item.productNameSnapshot, row.categoryName]
       .join(' ')
       .toLowerCase()
       .includes(keyword);
@@ -135,7 +140,7 @@ export default function StockCountPage(){
   const openBarcode = (rawCode:string) => {
     const code = normalizeCode(rawCode);
     if (!code) return;
-    const exact = items.find(item => normalizeCode(item.productCode) === code);
+    const matchedProductCode=productCodeByBarcode.get(code)||code,exact = items.find(item => normalizeCode(item.productCode) === matchedProductCode);
     setQuery(code);
     setCategory('all');
     setFilter('all');
