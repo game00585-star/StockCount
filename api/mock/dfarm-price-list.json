@@ -1,8 +1,0 @@
-{
-  "result": [
-    {"GOODS_CODE":"00001234567890123456","GOODS_NAME":"สินค้าทดสอบ รหัสยาว 500 กรัม","UTQ_NAME":"แพ็ค","Price":55,"New_Price":59},
-    {"GOODS_CODE":"DF-TEST-A01","GOODS_NAME":"สินค้าทดสอบ ตัวอักษร 1 กก.","UTQ_NAME":"แพ็ค","Price":120,"New_Price":125},
-    {"GOODS_CODE":"8850000000001","GOODS_NAME":"สินค้าทดสอบ ราคาเปลี่ยน 250 มล.","UTQ_NAME":"ขวด","Price":30,"New_Price":35},
-    {"GOODS_CODE":"8850000000001","GOODS_NAME":"สินค้าทดสอบ รหัสซ้ำ 250 มล.","UTQ_NAME":"ขวด","Price":30,"New_Price":35}
-  ]
-}
